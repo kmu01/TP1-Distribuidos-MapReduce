@@ -1,14 +1,27 @@
 package main
 
 import (
+	"context"
 	"log"
 	"mapreduce-tp/mapreduce/protos"
 	"net"
+
 	"google.golang.org/grpc"
 )
 
 type myCoordinatorServer struct{
 	protos.UnimplementedCoordinatorServer
+}
+
+// respondemos al RequestTask del worker
+func (s *myCoordinatorServer) AssignTask(_ context.Context, in *protos.RequestTask) (*protos.GiveTask, error) {
+	log.Print("[CLIENT] Assing Task");
+	return &protos.GiveTask{TypeTask: "map"}, nil
+}
+
+func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskResult) (*protos.Ack, error) {
+	log.Print("[CLIENT] Finished Task");
+	return &protos.Ack{Ack: "ack"}, nil
 }
 
 func main(){
