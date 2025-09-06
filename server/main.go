@@ -9,13 +9,13 @@ import (
 	"google.golang.org/grpc"
 )
 
-type myCoordinatorServer struct{
+type myCoordinatorServer struct {
 	protos.UnimplementedCoordinatorServer
 }
 
 type Coordinator struct {
-	workers[]Worker ///workers que estan activos
-	tasks[]Task  ///completed and not completed
+	workers []Worker ///workers que estan activos
+	tasks   []Task   ///completed and not completed
 	/// files to read
 	/// diccionario con workers y los files que se estan mapeando?
 	/// lista de resultados de map para pasar a reduce?
@@ -23,22 +23,22 @@ type Coordinator struct {
 
 type Task struct {
 	task_type int32 //map/reduce/nothing
-	status int32 //disponible/tomada/completada
+	status    int32 //disponible/tomada/completada
 	worker_id int32
 }
 
 type Worker struct {
-	id int32
-	task Task
-	status int32
+	id        int32
+	task      *Task
+	status    int32
 	timestamp int32 /// momento en el que le asignamos la tarea
 }
 
 var coordinator = Coordinator{}
 
-func CoordinatorInit(){
+func CoordinatorInit() {
 	// inicializamos coordinador
-	task := Task{task_type: 0, status: 1, worker_id: -1} /// id negativo cuando no hay worker id?
+	task := Task{task_type: 1, status: 0, worker_id: -1} /// id negativo cuando no hay worker id?
 	coordinator.tasks = append(coordinator.tasks, task)
 }
 
@@ -50,18 +50,21 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	var worker Worker
 
 	var task *Task
-	task = fetchTask(0, in.WorkerId);
+	task = fetchTask(0, in.WorkerId)
 	if task == nil {
 		task = fetchTask(1, in.WorkerId)
 	}
+	if task == nil {
+		task = &Task{task_type: 2, status: 0, worker_id: in.WorkerId}
+	}
 
 	worker = Worker{
-		id:       in.WorkerId,
-		task:     *task,
-		status:   1,
+		id:        in.WorkerId,
+		task:      task,
+		status:    1,
 		timestamp: 1,
 	}
-	
+
 	coordinator.workers = append(coordinator.workers, worker)
 
 	return &protos.GiveTask{TypeTask: 0}, nil
@@ -80,17 +83,19 @@ func fetchTask(task_type int32, worker_id int32) *Task {
 }
 
 func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskResult) (*protos.Ack, error) {
-	log.Print("[CLIENT] Finished Task");
-
-	// guardarme los resultados de context.results 
+	for i := 0; i < len(coordinator.workers); i++ {
+		task_id := coordinator.workers[i].id
+		if task_id == in.WorkerId {
+			coordinator.workers[i].task.status = 1
+			log.Print("[CLIENT] Finished Task: ", task_id)
+		}
+	}
 
 	return &protos.Ack{Ack: "ack"}, nil
 }
 
-
-
-func main(){
-	lis, err := net.Listen("tcp", ":8090");
+func main() {
+	lis, err := net.Listen("tcp", ":8090")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -101,7 +106,7 @@ func main(){
 	service := &myCoordinatorServer{}
 	protos.RegisterCoordinatorServer(server, service)
 	err = server.Serve(lis)
-	if err!=nil{
+	if err != nil {
 		log.Fatalf("cant serve: %s", err)
 	}
 }
