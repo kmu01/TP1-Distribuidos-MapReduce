@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = "https://github.com/kmu01/TP1-Distribuidos-MapReduce/mapreduce/protos/communication.protos";
+
+service Coordinator {
+    rpc AssignTask(RequestTask) returns (GiveTask) {}
+}
+
+message RequestTask {
+    int32 worker_id = 1;
+}
+
+message GiveTask {
+    string type_task = 1; 
+}
+
