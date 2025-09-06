@@ -4,6 +4,7 @@ option go_package = "https://github.com/kmu01/TP1-Distribuidos-MapReduce/blob/ba
 
 service Coordinator {
     rpc AssignTask(RequestTask) returns (GiveTask) {}
+    rpc FinishedTask(TaskResult) returns (Ack) {}
 }
 
 message RequestTask {
@@ -11,6 +12,13 @@ message RequestTask {
 }
 
 message GiveTask {
-    string type_task = 1; 
+    int32 type_task = 1; 
 }
 
+message TaskResult {
+    string results = 1;
+}
+
+message Ack {
+    string ack = 1;
+}

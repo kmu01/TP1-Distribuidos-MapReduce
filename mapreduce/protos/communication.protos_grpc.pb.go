@@ -8,7 +8,6 @@ package protos
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -20,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Coordinator_AssignTask_FullMethodName = "/Coordinator/AssignTask"
+	Coordinator_AssignTask_FullMethodName   = "/Coordinator/AssignTask"
+	Coordinator_FinishedTask_FullMethodName = "/Coordinator/FinishedTask"
 )
 
 // CoordinatorClient is the client API for Coordinator service.
@@ -28,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CoordinatorClient interface {
 	AssignTask(ctx context.Context, in *RequestTask, opts ...grpc.CallOption) (*GiveTask, error)
+	FinishedTask(ctx context.Context, in *TaskResult, opts ...grpc.CallOption) (*Ack, error)
 }
 
 type coordinatorClient struct {
@@ -48,11 +49,22 @@ func (c *coordinatorClient) AssignTask(ctx context.Context, in *RequestTask, opt
 	return out, nil
 }
 
+func (c *coordinatorClient) FinishedTask(ctx context.Context, in *TaskResult, opts ...grpc.CallOption) (*Ack, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Ack)
+	err := c.cc.Invoke(ctx, Coordinator_FinishedTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoordinatorServer is the server API for Coordinator service.
 // All implementations must embed UnimplementedCoordinatorServer
 // for forward compatibility.
 type CoordinatorServer interface {
 	AssignTask(context.Context, *RequestTask) (*GiveTask, error)
+	FinishedTask(context.Context, *TaskResult) (*Ack, error)
 	mustEmbedUnimplementedCoordinatorServer()
 }
 
@@ -65,6 +77,9 @@ type UnimplementedCoordinatorServer struct{}
 
 func (UnimplementedCoordinatorServer) AssignTask(context.Context, *RequestTask) (*GiveTask, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AssignTask not implemented")
+}
+func (UnimplementedCoordinatorServer) FinishedTask(context.Context, *TaskResult) (*Ack, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FinishedTask not implemented")
 }
 func (UnimplementedCoordinatorServer) mustEmbedUnimplementedCoordinatorServer() {}
 func (UnimplementedCoordinatorServer) testEmbeddedByValue()                     {}
@@ -105,6 +120,24 @@ func _Coordinator_AssignTask_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Coordinator_FinishedTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TaskResult)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoordinatorServer).FinishedTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Coordinator_FinishedTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoordinatorServer).FinishedTask(ctx, req.(*TaskResult))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Coordinator_ServiceDesc is the grpc.ServiceDesc for Coordinator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -115,6 +148,10 @@ var Coordinator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AssignTask",
 			Handler:    _Coordinator_AssignTask_Handler,
+		},
+		{
+			MethodName: "FinishedTask",
+			Handler:    _Coordinator_FinishedTask_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
