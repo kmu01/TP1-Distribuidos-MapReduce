@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "https://github.com/kmu01/TP1-Distribuidos-MapReduce/mapreduce/protos/communication.protos";
+option go_package = "https://github.com/kmu01/TP1-Distribuidos-MapReduce/blob/base/mapreduce/protos/communication;protos";
 
 service Coordinator {
     rpc AssignTask(RequestTask) returns (GiveTask) {}
