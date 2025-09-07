@@ -1,10 +1,10 @@
 package main
 
 import (
-	mapreduceseq "mapreduce-tp/mapreduce"
 	"sort"
 	"strings"
 	"unicode"
+	"mapreduce-tp/seq"
 )
 
 // Map: produce pares (word, docID)

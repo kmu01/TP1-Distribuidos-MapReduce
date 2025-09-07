@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.8
 // 	protoc        v3.21.12
-// source: communication.protos
+// source: common/protos/communication.protos
 
 package protos
 
@@ -30,7 +30,7 @@ type RequestTask struct {
 
 func (x *RequestTask) Reset() {
 	*x = RequestTask{}
-	mi := &file_communication_protos_msgTypes[0]
+	mi := &file_common_protos_communication_protos_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +42,7 @@ func (x *RequestTask) String() string {
 func (*RequestTask) ProtoMessage() {}
 
 func (x *RequestTask) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_protos_msgTypes[0]
+	mi := &file_common_protos_communication_protos_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,7 +55,7 @@ func (x *RequestTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestTask.ProtoReflect.Descriptor instead.
 func (*RequestTask) Descriptor() ([]byte, []int) {
-	return file_communication_protos_rawDescGZIP(), []int{0}
+	return file_common_protos_communication_protos_rawDescGZIP(), []int{0}
 }
 
 func (x *RequestTask) GetWorkerId() int32 {
@@ -68,13 +68,15 @@ func (x *RequestTask) GetWorkerId() int32 {
 type GiveTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TypeTask      int32                  `protobuf:"varint,1,opt,name=type_task,json=typeTask,proto3" json:"type_task,omitempty"`
+	File          string                 `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
+	TaskId        int32                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GiveTask) Reset() {
 	*x = GiveTask{}
-	mi := &file_communication_protos_msgTypes[1]
+	mi := &file_common_protos_communication_protos_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -86,7 +88,7 @@ func (x *GiveTask) String() string {
 func (*GiveTask) ProtoMessage() {}
 
 func (x *GiveTask) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_protos_msgTypes[1]
+	mi := &file_common_protos_communication_protos_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -99,12 +101,26 @@ func (x *GiveTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiveTask.ProtoReflect.Descriptor instead.
 func (*GiveTask) Descriptor() ([]byte, []int) {
-	return file_communication_protos_rawDescGZIP(), []int{1}
+	return file_common_protos_communication_protos_rawDescGZIP(), []int{1}
 }
 
 func (x *GiveTask) GetTypeTask() int32 {
 	if x != nil {
 		return x.TypeTask
+	}
+	return 0
+}
+
+func (x *GiveTask) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *GiveTask) GetTaskId() int32 {
+	if x != nil {
+		return x.TaskId
 	}
 	return 0
 }
@@ -118,7 +134,7 @@ type TaskResult struct {
 
 func (x *TaskResult) Reset() {
 	*x = TaskResult{}
-	mi := &file_communication_protos_msgTypes[2]
+	mi := &file_common_protos_communication_protos_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -130,7 +146,7 @@ func (x *TaskResult) String() string {
 func (*TaskResult) ProtoMessage() {}
 
 func (x *TaskResult) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_protos_msgTypes[2]
+	mi := &file_common_protos_communication_protos_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -143,7 +159,7 @@ func (x *TaskResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskResult.ProtoReflect.Descriptor instead.
 func (*TaskResult) Descriptor() ([]byte, []int) {
-	return file_communication_protos_rawDescGZIP(), []int{2}
+	return file_common_protos_communication_protos_rawDescGZIP(), []int{2}
 }
 
 func (x *TaskResult) GetWorkerId() int32 {
@@ -155,14 +171,14 @@ func (x *TaskResult) GetWorkerId() int32 {
 
 type Ack struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ack           string                 `protobuf:"bytes,1,opt,name=ack,proto3" json:"ack,omitempty"`
+	CommitState   int32                  `protobuf:"varint,1,opt,name=commit_state,json=commitState,proto3" json:"commit_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Ack) Reset() {
 	*x = Ack{}
-	mi := &file_communication_protos_msgTypes[3]
+	mi := &file_common_protos_communication_protos_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -174,7 +190,7 @@ func (x *Ack) String() string {
 func (*Ack) ProtoMessage() {}
 
 func (x *Ack) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_protos_msgTypes[3]
+	mi := &file_common_protos_communication_protos_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -187,55 +203,57 @@ func (x *Ack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ack.ProtoReflect.Descriptor instead.
 func (*Ack) Descriptor() ([]byte, []int) {
-	return file_communication_protos_rawDescGZIP(), []int{3}
+	return file_common_protos_communication_protos_rawDescGZIP(), []int{3}
 }
 
-func (x *Ack) GetAck() string {
+func (x *Ack) GetCommitState() int32 {
 	if x != nil {
-		return x.Ack
+		return x.CommitState
 	}
-	return ""
+	return 0
 }
 
-var File_communication_protos protoreflect.FileDescriptor
+var File_common_protos_communication_protos protoreflect.FileDescriptor
 
-const file_communication_protos_rawDesc = "" +
+const file_common_protos_communication_protos_rawDesc = "" +
 	"\n" +
-	"\x14communication.protos\"*\n" +
+	"\"common/protos/communication.protos\"*\n" +
 	"\vRequestTask\x12\x1b\n" +
-	"\tworker_id\x18\x01 \x01(\x05R\bworkerId\"'\n" +
+	"\tworker_id\x18\x01 \x01(\x05R\bworkerId\"T\n" +
 	"\bGiveTask\x12\x1b\n" +
-	"\ttype_task\x18\x01 \x01(\x05R\btypeTask\")\n" +
+	"\ttype_task\x18\x01 \x01(\x05R\btypeTask\x12\x12\n" +
+	"\x04file\x18\x02 \x01(\tR\x04file\x12\x17\n" +
+	"\atask_id\x18\x03 \x01(\x05R\x06taskId\")\n" +
 	"\n" +
 	"TaskResult\x12\x1b\n" +
-	"\tworker_id\x18\x01 \x01(\x05R\bworkerId\"\x17\n" +
-	"\x03Ack\x12\x10\n" +
-	"\x03ack\x18\x01 \x01(\tR\x03ack2[\n" +
+	"\tworker_id\x18\x01 \x01(\x05R\bworkerId\"(\n" +
+	"\x03Ack\x12!\n" +
+	"\fcommit_state\x18\x01 \x01(\x05R\vcommitState2[\n" +
 	"\vCoordinator\x12'\n" +
 	"\n" +
 	"AssignTask\x12\f.RequestTask\x1a\t.GiveTask\"\x00\x12#\n" +
 	"\fFinishedTask\x12\v.TaskResult\x1a\x04.Ack\"\x00BeZchttps://github.com/kmu01/TP1-Distribuidos-MapReduce/blob/base/mapreduce/protos/communication;protosb\x06proto3"
 
 var (
-	file_communication_protos_rawDescOnce sync.Once
-	file_communication_protos_rawDescData []byte
+	file_common_protos_communication_protos_rawDescOnce sync.Once
+	file_common_protos_communication_protos_rawDescData []byte
 )
 
-func file_communication_protos_rawDescGZIP() []byte {
-	file_communication_protos_rawDescOnce.Do(func() {
-		file_communication_protos_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_communication_protos_rawDesc), len(file_communication_protos_rawDesc)))
+func file_common_protos_communication_protos_rawDescGZIP() []byte {
+	file_common_protos_communication_protos_rawDescOnce.Do(func() {
+		file_common_protos_communication_protos_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_common_protos_communication_protos_rawDesc), len(file_common_protos_communication_protos_rawDesc)))
 	})
-	return file_communication_protos_rawDescData
+	return file_common_protos_communication_protos_rawDescData
 }
 
-var file_communication_protos_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_communication_protos_goTypes = []any{
+var file_common_protos_communication_protos_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_common_protos_communication_protos_goTypes = []any{
 	(*RequestTask)(nil), // 0: RequestTask
 	(*GiveTask)(nil),    // 1: GiveTask
 	(*TaskResult)(nil),  // 2: TaskResult
 	(*Ack)(nil),         // 3: Ack
 }
-var file_communication_protos_depIdxs = []int32{
+var file_common_protos_communication_protos_depIdxs = []int32{
 	0, // 0: Coordinator.AssignTask:input_type -> RequestTask
 	2, // 1: Coordinator.FinishedTask:input_type -> TaskResult
 	1, // 2: Coordinator.AssignTask:output_type -> GiveTask
@@ -247,26 +265,26 @@ var file_communication_protos_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_communication_protos_init() }
-func file_communication_protos_init() {
-	if File_communication_protos != nil {
+func init() { file_common_protos_communication_protos_init() }
+func file_common_protos_communication_protos_init() {
+	if File_common_protos_communication_protos != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_communication_protos_rawDesc), len(file_communication_protos_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_protos_communication_protos_rawDesc), len(file_common_protos_communication_protos_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_communication_protos_goTypes,
-		DependencyIndexes: file_communication_protos_depIdxs,
-		MessageInfos:      file_communication_protos_msgTypes,
+		GoTypes:           file_common_protos_communication_protos_goTypes,
+		DependencyIndexes: file_common_protos_communication_protos_depIdxs,
+		MessageInfos:      file_common_protos_communication_protos_msgTypes,
 	}.Build()
-	File_communication_protos = out.File
-	file_communication_protos_goTypes = nil
-	file_communication_protos_depIdxs = nil
+	File_common_protos_communication_protos = out.File
+	file_common_protos_communication_protos_goTypes = nil
+	file_common_protos_communication_protos_depIdxs = nil
 }

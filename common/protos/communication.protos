@@ -12,7 +12,9 @@ message RequestTask {
 }
 
 message GiveTask {
-    int32 type_task = 1; 
+    int32 type_task = 1;
+    string file = 2; 
+    int32 task_id =3;
 }
 
 message TaskResult {
@@ -20,5 +22,5 @@ message TaskResult {
 }
 
 message Ack {
-    string ack = 1;
+    int32 commit_state = 1;
 }

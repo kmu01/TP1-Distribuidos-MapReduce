@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.21.12
-// source: communication.protos
+// source: common/protos/communication.protos
 
 package protos
 
@@ -155,5 +155,5 @@ var Coordinator_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "communication.protos",
+	Metadata: "common/protos/communication.protos",
 }
