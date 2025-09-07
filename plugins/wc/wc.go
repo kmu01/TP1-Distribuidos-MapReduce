@@ -1,10 +1,10 @@
 package main
 
 import (
+	mapreduceseq "mapreduce-tp/seq"
 	"strconv"
 	"strings"
 	"unicode"
-	"mapreduce-tp/seq"
 )
 
 // Map: produce pares (word, "1")

@@ -44,9 +44,6 @@ type Coordinator struct {
 	reduce_tasks []Task
 	finish_map_reduce bool
 	server *grpc.Server
-	/// files to read
-	/// diccionario con workers y los files que se estan mapeando?
-	/// lista de resultados de map para pasar a reduce?
 }
 
 type Task struct {
@@ -138,6 +135,8 @@ func fetch_reduce_task(worker_id int32) *Task {
 func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskResult) (*protos.Ack, error) {
 	var worker_position int32
 	var worker_task *Task
+	
+	// revisar
 	for i := int32(0); i < int32(len(coordinator.workers)); i++ {
 		task_id := coordinator.workers[i].id
 		if task_id == in.WorkerId {
@@ -155,7 +154,8 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskRes
 	worker_task.status = 2
 
 	if worker_task.task_type == 0 {
-		new_task := Task{task_type: 1, status: 0, worker_id: -1, file: ""}
+
+		new_task := Task{task_id: worker_task.task_id, task_type: 1, status: 0, worker_id: -1, file: in.FileName} //crea reduce
 		coordinator.reduce_tasks = append(coordinator.reduce_tasks, new_task)
 	}
 	return &protos.Ack{CommitState: 1}, nil

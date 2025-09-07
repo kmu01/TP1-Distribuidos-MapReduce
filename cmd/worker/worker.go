@@ -18,6 +18,11 @@ import (
 
 type Task int32
 
+type KeyValue struct {
+    Key   string
+    Value string
+}
+
 const (
 	Map    Task = 0
 	Reduce Task = 1
@@ -28,8 +33,8 @@ var (
 	addr = flag.String("addr", "localhost:8091", "the address to connect to")
 )
 
-const parcial_path = "mapreduce-tp/filesystem/parcial_result/"
-const result_path = "mapreduce-tp/filesystem/final_result/"
+const parcial_path = "filesystem/parcial_result/"
+const result_path = "filesystem/final_result/"
 
 func connect() (context.Context, protos.CoordinatorClient) {
 	flag.Parse()
@@ -51,37 +56,97 @@ func run_map(file string, map_function func(string, string) []mapreduceseq.KeyVa
 	return kva
 }
 
-func run_reduce(file string, reduce_function func(string, []string) string) string {
-	return "reduce result"
+func run_reduce(file string, reduce_function func(string, []string) string) []KeyValue {
+	log.Printf("file path in run_reduce %s jjjjjj", file)
+	
+	file_path := "filesystem/parcial_result/" + file
+
+	content, err := os.ReadFile(file_path)
+
+	log.Print("content in run_reduce: ",string(content))
+	if err != nil {
+		log.Fatalf("cannot read %v: %v", file, err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	var kvs []KeyValue
+	for index := range lines {
+		splits := strings.Split(lines[index], ",")
+		kv := KeyValue{Key:splits[0], Value:splits[1]}
+		kvs = append(kvs, kv)
+	}
+
+	groups := make(map[string][]string)
+	for _, kv := range kvs {
+		groups[kv.Key] = append(groups[kv.Key], kv.Value)
+	}
+
+	var results []KeyValue
+	for k, v := range groups {
+		output := reduce_function(k, v)
+		results = append(results, KeyValue{Key: k, Value: output})
+	}
+
+	log.Print("Resultados del run reduce: ", results)
+
+	// kva := reduce_function(file, string(groups))
+	return results
+	// return "resultados"
 }
 
 func write(path string, contents string) {
 	log.Print("writing... ")
-	log.Print("contents: ", contents)
 	log.Print("path: ", path)
+
+	f, err := os.Create(path)
+
+	log.Print("creating")
+	
+	if err != nil {
+        panic(err)
+    }
+	defer f.Close()
+
+	n, err := f.WriteString(contents) 
+	if err != nil {
+        panic(err)
+    }
+
+	log.Print("contents in bytes: ", n)
+	f.Sync()
 }
 
-func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32) {
+func commit_map(map_result []mapreduceseq.KeyValue, path string, file_name string) {
 	//TODO: verificar el id de la task result, por ahora las id de las task son todas iguales
+
+	log.Print("map_result: ", map_result, "path:", path, "file_name: ", file_name)
 
 	var lines []string
 	for _, v := range map_result {
-		line_string := v.Key + "" + v.Value
+		line_string := v.Key + "," + v.Value
 		lines = append(lines, line_string)
 	}
 	contents := strings.Join(lines, "\n")
-	strig_task_id := strconv.Itoa(int(task_id))
-	file_name := "p-" + strig_task_id + ".txt"
 	file_path := path + file_name
 	write(file_path, contents)
 	log.Print("Map commited")
 }
 
-func commit_reduce(contents string, path string, task_id int32) {
-	strig_task_id := strconv.Itoa(int(task_id))
-	file_name := "r-" + strig_task_id + ".txt"
+func commit_reduce(contents []KeyValue, path string, file_name string) {
+	log.Print("contents:", contents, "path: ", path, "file_name:", file_name)
+
+	/// serializar resultados
+	var lines []string
+	for _, v := range contents {
+		line_string := v.Key + "," + v.Value
+		lines = append(lines, line_string)
+	}
+	result := strings.Join(lines, "\n")
+
+	log.Print("commit reduce content serialized: ",result)
+
 	file_path := path + file_name
-	write(file_path, contents)
+	write(file_path, result)
 	log.Print("Reduce commited")
 }
 
@@ -95,22 +160,29 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 		switch result.TypeTask {
 		case 0:
 			map_result := run_map(result.File, map_function)
-			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: 1}) //lo dejamos el id en 1 pero despues le asignamos una id posta
+			
+			strig_task_id := strconv.Itoa(int(result.TaskId))
+			file_name := "p-" + strig_task_id + ".txt"
+
+			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: 1, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
 			if err != nil {
 				log.Fatalf("could not map: %v", err)
 			}
 			if r.CommitState == 1 {
-				commit_map(map_result, parcial_path, result.TaskId)
+				commit_map(map_result, parcial_path, file_name)
 			}
 		case 1:
 			reduce_result := run_reduce(result.File, reduce_function)
 
-			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: 1}) //lo dejamos el id en 1 pero despues le asignamos una id posta
+			strig_task_id := strconv.Itoa(int(result.TaskId))
+			file_name := "r-" + strig_task_id + ".txt" // no lo va a usar el coordinador
+
+			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: 1, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
 			if err != nil {
 				log.Fatalf("could not map: %v", err)
 			}
 			if r.CommitState == 1 {
-				commit_reduce(reduce_result, result_path, result.TaskId)
+				commit_reduce(reduce_result, result_path, file_name)
 			}
 		default:
 			still_working = false
@@ -157,5 +229,4 @@ func main() {
 	map_function, reduce_function := get_map_reduce_functions(pluginFile)
 	ctx, connection := connect()
 	run_worker(ctx, connection, map_function, reduce_function)
-
 }
