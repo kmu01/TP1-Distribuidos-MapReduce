@@ -7,14 +7,13 @@ service Coordinator {
     rpc FinishedTask(TaskResult) returns (Ack) {}
 }
 
-message RequestTask {
-    int32 worker_id = 1;
-}
+message RequestTask {}
 
 message GiveTask {
     int32 type_task = 1;
     string file = 2; 
-    int32 task_id =3;
+    int32 task_id = 3;
+    int32 worker_id = 4;
 }
 
 message TaskResult {

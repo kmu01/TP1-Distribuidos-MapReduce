@@ -153,7 +153,7 @@ func commit_reduce(contents []KeyValue, path string, file_name string) {
 func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string) {
 	var still_working bool = true
 	for still_working {
-		result, err := connection.AssignTask(ctx, &protos.RequestTask{WorkerId: 1})
+		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
 		if err != nil {
 			log.Fatalf("could not connect: %v", err)
 		}
@@ -164,7 +164,7 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 			strig_task_id := strconv.Itoa(int(result.TaskId))
 			file_name := "p-" + strig_task_id + ".txt"
 
-			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: 1, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
+			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
 			if err != nil {
 				log.Fatalf("could not map: %v", err)
 			}
@@ -177,7 +177,7 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 			strig_task_id := strconv.Itoa(int(result.TaskId))
 			file_name := "r-" + strig_task_id + ".txt" // no lo va a usar el coordinador
 
-			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: 1, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
+			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
 			if err != nil {
 				log.Fatalf("could not map: %v", err)
 			}

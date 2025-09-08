@@ -7,11 +7,13 @@ import (
 	"mapreduce-tp/common/protos"
 	"net"
 	"os"
-
+	"time"
 	"google.golang.org/grpc"
 )
 
 type TaskType int32
+
+const max_time_seconds = 10
 
 const (
 	Map    TaskType = 0
@@ -44,31 +46,33 @@ type Coordinator struct {
 	reduce_tasks []Task
 	finish_map_reduce bool
 	server *grpc.Server
+	next_worker_id int32
 }
 
 type Task struct {
 	task_id int32
 	task_type int32 //map/reduce/nothing
 	status    int32 //disponible/tomada/completada
-	worker_id int32
 	file      string
+	time time.Time
 }
 
 type Worker struct {
 	id        int32
 	task      *Task
 	status    int32
-	timestamp int32 /// momento en el que le asignamos la tarea
+
 }
 
 var coordinator = Coordinator{}
 
 func init_coordinator(files []string) {
 	coordinator.server = grpc.NewServer()
+	coordinator.next_worker_id = 0
 	var id int32 = 0
 	for _, filename := range files {
 		log.Print("Added new file to coordinator: ", filename)
-		new_task := Task{task_type: 0, status: 0, worker_id: -1, file: filename, task_id: id}
+		new_task := Task{task_type: 0, status: 0, file: filename, task_id: id}
 		coordinator.map_tasks = append(coordinator.map_tasks, new_task)
 		id+=1
 	}
@@ -77,58 +81,84 @@ func init_coordinator(files []string) {
 
 // respondemos al RequestTask del worker
 func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.RequestTask) (*protos.GiveTask, error) {
+	coordinator.next_worker_id += 1
 	var worker Worker
-	var task = fetch_task(in.WorkerId)
+	var task = fetch_task()
 	worker = Worker{
-		id:        in.WorkerId,
+		id:        coordinator.next_worker_id,
 		task:      task,
 		status:    1,
-		timestamp: 1,
 	}
 
 	coordinator.workers = append(coordinator.workers, worker)
 	if coordinator.finish_map_reduce {
 		log.Print("No more tasks")
 	}
-	return &protos.GiveTask{TypeTask: task.task_type, File: task.file, TaskId: task.task_id}, nil
+	return &protos.GiveTask{TypeTask: task.task_type, File: task.file, TaskId: task.task_id, WorkerId: coordinator.next_worker_id}, nil
 }
 
-func fetch_task(worker_id int32) *Task {
+func fetch_task() *Task {
 	var task *Task
-	task = fetch_map_task(worker_id)
+	task = fetch_map_task()
 	if task == nil {
-		task = fetch_reduce_task(worker_id)
+		task = fetch_reduce_task()
 	}
 	if task == nil {
-		task = &Task{task_type: 2, status: 0, worker_id: worker_id}
+		task = &Task{task_type: 2, status: 0}
 		coordinator.finish_map_reduce = true
 	}
 	return task
 }
 
-func fetch_map_task(worker_id int32) *Task {
+func fetch_map_task() *Task {
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
 		if task.status == 0 {
 			task.status = 1
-			task.worker_id = worker_id
+			task.time = time.Now()
 			return task
 		}
 	}
-	//verificar las tareas con mas de 10seg
+	for i := 0; i < len(coordinator.map_tasks); i++ {
+		task := &coordinator.map_tasks[i]
+		if task.status == 1 && time.Since(task.time).Seconds() >= max_time_seconds {
+			task.time = time.Now()
+			return task
+		}
+	}
+	for i := 0; i < len(coordinator.map_tasks); i++ {
+		task := &coordinator.map_tasks[i]
+		if task.status != 2 {
+			task.time = time.Now()
+			return task
+		}
+	}
 	return nil
 }
 
-func fetch_reduce_task(worker_id int32) *Task {
+func fetch_reduce_task() *Task {
 	for i := 0; i < len(coordinator.reduce_tasks); i++ {
 		task := &coordinator.reduce_tasks[i]
 		if task.status == 0 {
 			task.status = 1
-			task.worker_id = worker_id
+			task.time = time.Now()
 			return task
 		}
 	}
-	//verificar las tareas con mas de 10seg
+	for i := 0; i < len(coordinator.reduce_tasks); i++ {
+		task := &coordinator.reduce_tasks[i]
+		if task.status == 1 && time.Since(task.time).Seconds() >= max_time_seconds {
+			task.time = time.Now()
+			return task
+		}
+	}
+	for i := 0; i < len(coordinator.reduce_tasks); i++ {
+		task := &coordinator.reduce_tasks[i]
+		if task.status != 2{
+			task.time = time.Now()
+			return task
+		}
+	}
 	return nil
 }
 
@@ -145,17 +175,14 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskRes
 			break
 		}
 	}
-
 	coordinator.workers = append(coordinator.workers[:worker_position], coordinator.workers[worker_position+1:]...)
 
 	if worker_task.status == 2 {
 		return &protos.Ack{CommitState: 2}, nil
 	}
 	worker_task.status = 2
-
 	if worker_task.task_type == 0 {
-
-		new_task := Task{task_id: worker_task.task_id, task_type: 1, status: 0, worker_id: -1, file: in.FileName} //crea reduce
+		new_task := Task{task_id: worker_task.task_id, task_type: 1, status: 0, file: in.FileName} //crea reduce
 		coordinator.reduce_tasks = append(coordinator.reduce_tasks, new_task)
 	}
 	return &protos.Ack{CommitState: 1}, nil
