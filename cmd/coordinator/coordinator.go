@@ -89,7 +89,10 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 		task:      task,
 		status:    1,
 	}
-
+	if !coordinator.finish_map_reduce {
+		log.Print("Assigned task ", task.task_id, " - type task: ", task.task_type)
+	}
+	
 	coordinator.workers = append(coordinator.workers, worker)
 	if coordinator.finish_map_reduce {
 		log.Print("No more tasks")
@@ -121,7 +124,8 @@ func fetch_map_task() *Task {
 	}
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
-		if task.status == 1 && time.Since(task.time).Seconds() >= max_time_seconds {
+		if task.status == 1 && (time.Since(task.time)).Seconds() >= max_time_seconds {
+			log.Print("Time limit")
 			task.time = time.Now()
 			return task
 		}
@@ -147,7 +151,8 @@ func fetch_reduce_task() *Task {
 	}
 	for i := 0; i < len(coordinator.reduce_tasks); i++ {
 		task := &coordinator.reduce_tasks[i]
-		if task.status == 1 && time.Since(task.time).Seconds() >= max_time_seconds {
+		if task.status == 1 && (time.Since(task.time)).Seconds() >= max_time_seconds {
+			log.Print("Time limit")
 			task.time = time.Now()
 			return task
 		}

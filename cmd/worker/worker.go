@@ -87,8 +87,6 @@ func run_reduce(file string, reduce_function func(string, []string) string) []Ke
 		results = append(results, KeyValue{Key: k, Value: output})
 	}
 
-	log.Print("Resultados del run reduce: ", results)
-
 	// kva := reduce_function(file, string(groups))
 	return results
 	// return "resultados"
@@ -96,11 +94,7 @@ func run_reduce(file string, reduce_function func(string, []string) string) []Ke
 
 func write(path string, contents string) {
 	log.Print("writing... ")
-	log.Print("path: ", path)
-
 	f, err := os.Create(path)
-
-	log.Print("creating")
 	
 	if err != nil {
         panic(err)
@@ -118,9 +112,7 @@ func write(path string, contents string) {
 
 func commit_map(map_result []mapreduceseq.KeyValue, path string, file_name string) {
 	//TODO: verificar el id de la task result, por ahora las id de las task son todas iguales
-
-	log.Print("map_result: ", map_result, "path:", path, "file_name: ", file_name)
-
+	
 	var lines []string
 	for _, v := range map_result {
 		line_string := v.Key + "," + v.Value
@@ -133,8 +125,6 @@ func commit_map(map_result []mapreduceseq.KeyValue, path string, file_name strin
 }
 
 func commit_reduce(contents []KeyValue, path string, file_name string) {
-	log.Print("contents:", contents, "path: ", path, "file_name:", file_name)
-
 	/// serializar resultados
 	var lines []string
 	for _, v := range contents {
@@ -142,9 +132,6 @@ func commit_reduce(contents []KeyValue, path string, file_name string) {
 		lines = append(lines, line_string)
 	}
 	result := strings.Join(lines, "\n")
-
-	log.Print("commit reduce content serialized: ",result)
-
 	file_path := path + file_name
 	write(file_path, result)
 	log.Print("Reduce commited")
@@ -154,6 +141,11 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 	var still_working bool = true
 	for still_working {
 		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
+		// en la parte comentada pruebo que se caigan los dos primeros workers
+		/*if result.WorkerId == 1 || result.WorkerId == 2{
+			log.Print("Exit worker")
+			break
+		}*/
 		if err != nil {
 			log.Fatalf("could not connect: %v", err)
 		}
