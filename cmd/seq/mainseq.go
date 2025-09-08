@@ -46,8 +46,13 @@ func main() {
 	// Ejecutar secuencial
 	result := mapreduceseq.Sequential(files, mapf, reducef)
 
-	// Mostrar resultados
-	for _, kv := range result {
-		fmt.Printf("%v %v\n", kv.Key, kv.Value)
+	outFile, err := os.Create("sequential-out.txt")
+	if err != nil {
+		log.Fatalf("cannot create output file: %v", err)
 	}
+	defer outFile.Close()
+	for _, kv := range result {
+		fmt.Fprintf(outFile, "%v %v\n", kv.Key, kv.Value)
+	}
+	fmt.Println("Resultado secuencial guardado en sequential-out.txt")
 }
