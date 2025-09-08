@@ -7,6 +7,7 @@ import (
 	"mapreduce-tp/common/protos"
 	"net"
 	"os"
+	"sync"
 	"time"
 	"google.golang.org/grpc"
 )
@@ -47,6 +48,7 @@ type Coordinator struct {
 	finish_map_reduce bool
 	server *grpc.Server
 	next_worker_id int32
+	mu sync.Mutex
 }
 
 type Task struct {
@@ -81,6 +83,8 @@ func init_coordinator(files []string) {
 
 // respondemos al RequestTask del worker
 func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.RequestTask) (*protos.GiveTask, error) {
+	coordinator.mu.Lock()
+    defer coordinator.mu.Unlock()
 	coordinator.next_worker_id += 1
 	var worker Worker
 	var task = fetch_task()
@@ -90,7 +94,7 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 		status:    1,
 	}
 	if !coordinator.finish_map_reduce {
-		log.Print("Assigned task ", task.task_id, " - type task: ", task.task_type)
+		//log.Print("Assigned task ", task.task_id, " - type task: ", task.task_type)
 	}
 	
 	coordinator.workers = append(coordinator.workers, worker)
@@ -119,6 +123,7 @@ func fetch_map_task() *Task {
 		if task.status == 0 {
 			task.status = 1
 			task.time = time.Now()
+			log.Print("Assigned MAP task ", task.task_id, " - file: ", task.file)
 			return task
 		}
 	}
@@ -130,6 +135,28 @@ func fetch_map_task() *Task {
 			return task
 		}
 	}
+
+	/*
+	Si todos los workers ya tomaron sus tareas (status == 1),
+	pero no expiró el timeout, este for igual reasigna
+	una de esas tareas tomadas a otro worker,
+	aunque el primero siga trabajando.
+
+	Ejemplo: 
+	2 textos y 3 workers
+	Worker 1 toma la tarea 0 (status = 1)
+	Worker 2 toma la tarea 1 (status = 1)
+	Si ambos siguen trabajando en su tarea Map
+	CUando el worker 3 pida tarea, se le reasigna la tarea 0 o 1
+
+	El primer y segundo for no encuentran 
+	tareas disponibles(status=0) ni expiradas.
+
+	El tercer for encuentra la tarea 0 (status = 1) status != 2,
+	la reasigna y ahora dos workers ejecutan la misma tarea.
+
+	*/
+	/*
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
 		if task.status != 2 {
@@ -137,6 +164,7 @@ func fetch_map_task() *Task {
 			return task
 		}
 	}
+	*/
 	return nil
 }
 
@@ -146,6 +174,7 @@ func fetch_reduce_task() *Task {
 		if task.status == 0 {
 			task.status = 1
 			task.time = time.Now()
+			log.Print("Assigned REDUCE task ", task.task_id, " - file: ", task.file)
 			return task
 		}
 	}
@@ -157,6 +186,8 @@ func fetch_reduce_task() *Task {
 			return task
 		}
 	}
+
+	/*
 	for i := 0; i < len(coordinator.reduce_tasks); i++ {
 		task := &coordinator.reduce_tasks[i]
 		if task.status != 2{
@@ -164,13 +195,15 @@ func fetch_reduce_task() *Task {
 			return task
 		}
 	}
+	*/
 	return nil
 }
 
 func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskResult) (*protos.Ack, error) {
 	var worker_position int32
 	var worker_task *Task
-	
+	coordinator.mu.Lock()
+    defer coordinator.mu.Unlock()
 	// revisar
 	for i := int32(0); i < int32(len(coordinator.workers)); i++ {
 		task_id := coordinator.workers[i].id
@@ -194,7 +227,11 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskRes
 }
 
 func start_server(porth string) {
-	lis, err := net.Listen("tcp", porth)
+	if _, err := os.Stat(socketPath); err == nil {
+		os.Remove(socketPath)
+	}
+
+	lis, err := net.Listen("unix", socketPath)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -202,24 +239,26 @@ func start_server(porth string) {
 	server := coordinator.server
 	service := &myCoordinatorServer{}
 	protos.RegisterCoordinatorServer(server, service)
+	log.Printf("Coordinator listening on unix socket %s", socketPath)
 	err = server.Serve(lis)
 	if err != nil {
 		log.Fatalf("cant serve: %s", err)
 	}
+	os.Remove(socketPath)
 }
 
-const porth = ":8091"
+const socketPath = "/tmp/mapreduce.sock"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: go run mainseq.go file1.txt file2.txt ...\n")
+		fmt.Fprintf(os.Stderr, "Usage: go run coordinator.go file1.txt file2.txt ...\n")
 		os.Exit(1)
 	}
 
 	files := os.Args[1:]
 	init_coordinator(files)
 
-	start_server(porth)
+	start_server(socketPath)
 
 	log.Printf("Exit")
 }
