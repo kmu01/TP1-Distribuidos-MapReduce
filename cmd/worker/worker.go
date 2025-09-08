@@ -6,11 +6,13 @@ import (
 	"log"
 	"mapreduce-tp/common/protos"
 	mapreduceseq "mapreduce-tp/seq"
+	"math/rand"
 	"os"
 	"plugin"
+	"sort"
 	"strconv"
 	"strings"
-	"sort"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -55,13 +57,10 @@ func run_map(file string, map_function func(string, string) []mapreduceseq.KeyVa
 }
 
 func run_reduce(file string, reduce_function func(string, []string) string) []KeyValue {
-	log.Printf("file path in run_reduce %s jjjjjj", file)
-	
 	file_path := "filesystem/parcial_result/" + file
 
 	content, err := os.ReadFile(file_path)
 
-	log.Print("content in run_reduce: ",string(content))
 	if err != nil {
 		log.Fatalf("cannot read %v: %v", file, err)
 	}
@@ -104,13 +103,11 @@ func write(path string, contents string) {
         panic(err)
     }
 
-	log.Print("contents in bytes: ", n)
+	log.Print("Bytes written: ", n)
 	f.Sync()
 }
 
 func commit_map(map_result []mapreduceseq.KeyValue, path string, file_name string) {
-	//TODO: verificar el id de la task result, por ahora las id de las task son todas iguales
-	
 	var lines []string
 	for _, v := range map_result {
 		line_string := v.Key + "," + v.Value
@@ -129,16 +126,16 @@ func commit_reduce(contents []KeyValue, path string, file_name string) {
 	})
 	var lines []string
 	for _, v := range contents {
-		line_string := v.Key + "," + v.Value
+		line_string := v.Key + " " + v.Value
 		lines = append(lines, line_string)
 	}
 	result := strings.Join(lines, "\n")
 	file_path := path + file_name
 	write(file_path, result)
-	log.Print("Reduce commited")
+	log.Printf("Reduce commited: %s", file_name)
 }
 
-func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string) {
+func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string, failure_prob int32) {
 	/*
 		bug: realizar antes la escritura del archivo parcial y luego avisar al coordinador
         porque el coordinador piensa que la tarea se completo pero el worker no alcanzo a escribir el archivo
@@ -146,33 +143,50 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 	*/
 	var still_working bool = true
        for still_working {
+
+			log.Print("Asking for new task")
 	       result, err := connection.AssignTask(ctx, &protos.RequestTask{})
 	       if err != nil {
 		       log.Fatalf("could not connect: %v", err)
 	       }
+
+		   v := int32(rand.Intn(101))
+		   if v < failure_prob {
+			log.Print("Probability failure encountered: EXIT")
+			break
+		   }
+
 	       switch result.TypeTask {
-	       case 0:
+	    	case 0:
+				log.Print("MAP task assigned")
 		       map_result := run_map(result.File, map_function)
 		       strig_task_id := strconv.Itoa(int(result.TaskId))
-		       file_name := "p-" + strig_task_id + ".txt"
-		       commit_map(map_result, parcial_path, file_name)
+		       file_name := "mr-" + strig_task_id + ".txt"
+		       
+			   commit_map(map_result, parcial_path, file_name)
+
+			//    time.Sleep(1 * time.Second)
 		       _, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name})
 		       if err != nil {
 			       log.Fatalf("could not map: %v", err)
 		       }
-		case 1:
-			reduce_result := run_reduce(result.File, reduce_function)
+			case 1:
+				log.Print("REDUCE task assigned")
+				reduce_result := run_reduce(result.File, reduce_function)
 
-			strig_task_id := strconv.Itoa(int(result.TaskId))
-			file_name := "r-" + strig_task_id + ".txt" // no lo va a usar el coordinador
+				strig_task_id := strconv.Itoa(int(result.TaskId))
+				file_name := "mr-out-" + strig_task_id + ".txt" // no lo va a usar el coordinador
 
-			_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
-			if err != nil {
-				log.Fatalf("could not map: %v", err)
-			}
-			commit_reduce(reduce_result, result_path, file_name)
-		default:
-			still_working = false
+				commit_reduce(reduce_result, result_path, file_name)
+
+				time.Sleep(1 * time.Second)
+				_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name})
+				if err != nil {
+					log.Fatalf("could not map: %v", err)	
+				}
+			default:
+				log.Print("No tasks available")
+				still_working = false
 		}
 	}
 }
@@ -211,9 +225,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	failure_prob := int32(0)
+	if len(os.Args) == 3 {
+		i, err := strconv.Atoi(os.Args[2])
+		if err != nil || i>100 || i<0{
+			failure_prob = 0
+		}
+		failure_prob = int32(i)
+	}
+
 	pluginFile := os.Args[1]
 
 	map_function, reduce_function := get_map_reduce_functions(pluginFile)
 	ctx, connection := connect()
-	run_worker(ctx, connection, map_function, reduce_function)
+	run_worker(ctx, connection, map_function, reduce_function, failure_prob)
 }

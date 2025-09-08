@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 	"time"
+
 	"google.golang.org/grpc"
 )
 
@@ -86,6 +87,7 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	coordinator.mu.Lock()
     defer coordinator.mu.Unlock()
 	coordinator.next_worker_id += 1
+	
 	var worker Worker
 	var task = fetch_task()
 	worker = Worker{
@@ -226,7 +228,7 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, in *protos.TaskRes
 	return &protos.Ack{CommitState: 1}, nil
 }
 
-func start_server(porth string) {
+func start_server() {
 	if _, err := os.Stat(socketPath); err == nil {
 		os.Remove(socketPath)
 	}
@@ -258,7 +260,7 @@ func main() {
 	files := os.Args[1:]
 	init_coordinator(files)
 
-	start_server(socketPath)
+	start_server()
 
 	log.Printf("Exit")
 }

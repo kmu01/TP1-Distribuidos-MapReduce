@@ -3,8 +3,9 @@
 # Uso: ./run_workers.sh <N> <plugin>
 # Ejemplo: ./run_workers.sh 5 plugins/wc.so
 
-N=${1:-3}  # Número de workers, por defecto 3 si no se especifica
+N=${1:-5}  # Número de workers, por defecto 3 si no se especifica
 PLUGIN=${2:-plugins/wc.so}  # Plugin a usar, por defecto wc.so
+FAILURE_PROB=0
 
 if [ -z "$N" ] || [ -z "$PLUGIN" ]; then
     echo "Uso: $0 <N> <plugin>"
@@ -13,7 +14,7 @@ fi
 
 for i in $(seq 1 $N); do
     echo "[Worker $i] Iniciando worker con plugin $PLUGIN..."
-    go run cmd/worker/worker.go $PLUGIN > worker_$i.log 2>&1 &
+    go run cmd/worker/worker.go $PLUGIN $FAILURE_PROB > worker_$i.log 2>&1 &
     echo "[Worker $i] Log: worker_$i.log"
 done
 
