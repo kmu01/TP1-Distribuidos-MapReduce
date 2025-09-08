@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"mapreduce-tp/common/protos"
@@ -11,6 +10,7 @@ import (
 	"plugin"
 	"strconv"
 	"strings"
+	"sort"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,16 +29,14 @@ const (
 	Finish Task = 2
 )
 
-var (
-	addr = flag.String("addr", "localhost:8091", "the address to connect to")
-)
+
 
 const parcial_path = "filesystem/parcial_result/"
 const result_path = "filesystem/final_result/"
 
 func connect() (context.Context, protos.CoordinatorClient) {
-	flag.Parse()
-	conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	socketPath := "/tmp/mapreduce.sock"
+	conn, err := grpc.Dial("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("failed to connect: %v", err)
 	}
@@ -121,11 +119,14 @@ func commit_map(map_result []mapreduceseq.KeyValue, path string, file_name strin
 	contents := strings.Join(lines, "\n")
 	file_path := path + file_name
 	write(file_path, contents)
-	log.Print("Map commited")
+	log.Printf("Map commited: %s", file_name)
 }
 
 func commit_reduce(contents []KeyValue, path string, file_name string) {
-	/// serializar resultados
+	// Ordenar resultados alfabéticamente por clave (Para comparar con la version secuencial)
+	sort.Slice(contents, func(i, j int) bool {
+		return contents[i].Key < contents[j].Key
+	})
 	var lines []string
 	for _, v := range contents {
 		line_string := v.Key + "," + v.Value
@@ -138,44 +139,38 @@ func commit_reduce(contents []KeyValue, path string, file_name string) {
 }
 
 func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string) {
+	/*
+		bug: realizar antes la escritura del archivo parcial y luego avisar al coordinador
+        porque el coordinador piensa que la tarea se completo pero el worker no alcanzo a escribir el archivo
+		y despues el reduce no encuentra el archivo parcial
+	*/
 	var still_working bool = true
-	for still_working {
-		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
-		// en la parte comentada pruebo que se caigan los dos primeros workers
-		/*if result.WorkerId == 1 || result.WorkerId == 2{
-			log.Print("Exit worker")
-			break
-		}*/
-		if err != nil {
-			log.Fatalf("could not connect: %v", err)
-		}
-		switch result.TypeTask {
-		case 0:
-			map_result := run_map(result.File, map_function)
-			
-			strig_task_id := strconv.Itoa(int(result.TaskId))
-			file_name := "p-" + strig_task_id + ".txt"
-
-			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
-			if err != nil {
-				log.Fatalf("could not map: %v", err)
-			}
-			if r.CommitState == 1 {
-				commit_map(map_result, parcial_path, file_name)
-			}
+       for still_working {
+	       result, err := connection.AssignTask(ctx, &protos.RequestTask{})
+	       if err != nil {
+		       log.Fatalf("could not connect: %v", err)
+	       }
+	       switch result.TypeTask {
+	       case 0:
+		       map_result := run_map(result.File, map_function)
+		       strig_task_id := strconv.Itoa(int(result.TaskId))
+		       file_name := "p-" + strig_task_id + ".txt"
+		       commit_map(map_result, parcial_path, file_name)
+		       _, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name})
+		       if err != nil {
+			       log.Fatalf("could not map: %v", err)
+		       }
 		case 1:
 			reduce_result := run_reduce(result.File, reduce_function)
 
 			strig_task_id := strconv.Itoa(int(result.TaskId))
 			file_name := "r-" + strig_task_id + ".txt" // no lo va a usar el coordinador
 
-			r, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
+			_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileName: file_name}) //lo dejamos el id en 1 pero despues le asignamos una id posta
 			if err != nil {
 				log.Fatalf("could not map: %v", err)
 			}
-			if r.CommitState == 1 {
-				commit_reduce(reduce_result, result_path, file_name)
-			}
+			commit_reduce(reduce_result, result_path, file_name)
 		default:
 			still_working = false
 		}
