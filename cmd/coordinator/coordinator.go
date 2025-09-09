@@ -36,9 +36,8 @@ type Task struct {
 }
 
 type Worker struct {
-	id     int32
-	task   *Task
-	status int32
+	id   int32
+	task *Task
 }
 
 var coordinator = Coordinator{}
@@ -55,9 +54,7 @@ func init_coordinator(files []string) {
 	var id int32 = 0
 	for _, filename := range files {
 		log.Print("Added new file to coordinator: ", filename)
-
 		files := []string{filename}
-
 		new_task := Task{task_type: config.Map, status: config.Available, files: files, task_id: id}
 		coordinator.map_tasks = append(coordinator.map_tasks, new_task)
 		id += 1
@@ -85,9 +82,8 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	var worker Worker
 	var task = fetch_task()
 	worker = Worker{
-		id:     coordinator.next_worker_id,
-		task:   task,
-		status: 1,
+		id:   coordinator.next_worker_id,
+		task: task,
 	}
 	// if !coordinator.finish_map_reduce {
 	//log.Print("Assigned task ", task.task_id, " - type task: ", task.task_type)
@@ -97,11 +93,7 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	if coordinator.finish_map_reduce {
 		log.Print("No more tasks")
 		return &protos.GiveTask{
-			TypeTask: int32(2),
-			Files:    task.files,
-			TaskId:   task.task_id,
-			WorkerId: coordinator.next_worker_id,
-			Reducers: config.Reducers,
+			TypeTask: int32(config.Finish),
 		}, nil
 	}
 	return &protos.GiveTask{
@@ -127,50 +119,30 @@ func fetch_task() *Task {
 }
 
 func fetch_map_task() *Task {
+
+	// If MAP task available
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
-		if task.status == 0 {
-			task.status = 1
-			task.time = time.Now()
-			log.Print("Assigned MAP task ", task.task_id, " - file: ", task.files)
-			return task
-		}
-	}
-	for i := 0; i < len(coordinator.map_tasks); i++ {
-		task := &coordinator.map_tasks[i]
-		if task.status == 1 && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
-			log.Print("Time limit")
+		if task.status == config.Available {
+			task.status = config.Unavailable
 			task.time = time.Now()
 			return task
 		}
 	}
 
-	// REVISAR
-	/*
-		Si todos los workers ya tomaron sus tareas (status == 1),
-		pero no expiró el timeout, este for igual reasigna
-		una de esas tareas tomadas a otro worker,
-		aunque el primero siga trabajando.
-
-		Ejemplo:
-		2 textos y 3 workers
-		Worker 1 toma la tarea 0 (status = 1)
-		Worker 2 toma la tarea 1 (status = 1)
-		Si ambos siguen trabajando en su tarea Map
-		CUando el worker 3 pida tarea, se le reasigna la tarea 0 o 1
-
-		El primer y segundo for no encuentran
-		tareas disponibles(status=0) ni expiradas.
-
-		El tercer for encuentra la tarea 0 (status = 1) status != 2,
-		la reasigna y ahora dos workers ejecutan la misma tarea.
-
-	*/
-
-	// PREGUNTAR ESTE CASO PARTICULAR
+	//If MAP task not available, see if one is taking too long
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
-		if task.status != 2 {
+		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
+			task.time = time.Now()
+			return task
+		}
+	}
+
+	//If all MAP tasks are taken and on time, assign the first one unavailable
+	for i := 0; i < len(coordinator.map_tasks); i++ {
+		task := &coordinator.map_tasks[i]
+		if task.status != config.Completed {
 			task.time = time.Now()
 			return task
 		}
@@ -204,7 +176,6 @@ func fetch_reduce_task() *Task {
 		}
 	}
 
-	//If all RECUDED tasks are taken and on time, assign the first one unavailable
 	return nil
 }
 
@@ -222,9 +193,6 @@ func get_reducer_ID(file string) int {
 func assign_partial_results(file_names []string) {
 	for _, file := range file_names {
 		reducer_id := get_reducer_ID(file)
-
-		log.Print("REDUCER ID: ", reducer_id, " FROM: ", file)
-
 		task := coordinator.reduce_tasks[int32(reducer_id)]
 		task.files = append(task.files, file)
 		coordinator.reduce_tasks[int32(reducer_id)] = task
@@ -249,8 +217,8 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 	}
 	coordinator.workers = append(coordinator.workers[:worker_position], coordinator.workers[worker_position+1:]...)
 
-	if worker_task.status == 2 {
-		return &protos.Ack{CommitState: 2}, nil
+	if worker_task.status == config.Completed {
+		return &protos.Ack{CommitState: int32(config.Deny)}, nil
 	}
 	worker_task.status = config.Completed
 
@@ -261,7 +229,7 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 		task.status = config.Completed
 		coordinator.reduce_tasks[task_id] = task
 	}
-	return &protos.Ack{CommitState: 1}, nil
+	return &protos.Ack{CommitState: int32(config.Accept)}, nil
 }
 
 func start_server() {
