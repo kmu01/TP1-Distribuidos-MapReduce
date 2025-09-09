@@ -7,6 +7,7 @@ const MaxTimeSeconds = 10
 const Reducers = 2
 
 type TaskType int32
+
 const (
 	Map    TaskType = 0
 	Reduce TaskType = 1
@@ -27,5 +28,3 @@ const (
 	Accept TypeCommit = 1
 	Deny   TypeCommit = 2
 )
-
-

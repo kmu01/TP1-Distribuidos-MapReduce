@@ -51,7 +51,7 @@ func init_coordinator(files []string) {
 	coordinator.server = grpc.NewServer()
 	coordinator.next_worker_id = 0
 	coordinator.reducers = config.Reducers
-	
+
 	var id int32 = 0
 	for _, filename := range files {
 		log.Print("Added new file to coordinator: ", filename)
@@ -180,7 +180,7 @@ func fetch_map_task() *Task {
 }
 
 func fetch_reduce_task() *Task {
-	
+
 	// If REDUCE task available
 	for id, task := range coordinator.reduce_tasks {
 		if task.status == 0 {
@@ -192,9 +192,9 @@ func fetch_reduce_task() *Task {
 			return &task
 		}
 	}
-	
+
 	//If REDUCE task not available, see if one is taking too long
-	for id, task := range coordinator.reduce_tasks{
+	for id, task := range coordinator.reduce_tasks {
 		if task.status == 1 && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
 			log.Print("Reduced task has reached time limit")
 			log.Print("tomada Task demorada")
@@ -203,14 +203,14 @@ func fetch_reduce_task() *Task {
 			return &task
 		}
 	}
-	
+
 	//If all RECUDED tasks are taken and on time, assign the first one unavailable
 	return nil
 }
 
 func get_reducer_ID(file string) int {
 	base := strings.TrimSuffix(file, ".txt")
-	parts := strings.Split(base, "-") 
+	parts := strings.Split(base, "-")
 	reducerStr := parts[len(parts)-1]
 	reducerID, err := strconv.Atoi(reducerStr)
 	if err != nil {
@@ -236,8 +236,7 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 	var worker_task *Task
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
-	
-	
+
 	// CUIDADO CON USAR WORKER ID COMO TASK IDS
 	var task_id int32
 	for i := int32(0); i < int32(len(coordinator.workers)); i++ {

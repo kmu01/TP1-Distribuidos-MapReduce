@@ -67,7 +67,7 @@ func run_reduce(file string, reduce_function func(string, []string) string) []Ke
 	lines := strings.Split(string(content), "\n")
 	var kvs []KeyValue
 	for index := range lines {
-		if lines[index] == ""{ 
+		if lines[index] == "" {
 			continue
 		}
 		splits := strings.Split(lines[index], " ")
@@ -96,10 +96,10 @@ func write(path string, file_name string, contents string) {
 	log.Print("writing in path file: ", path_file)
 
 	f, err := os.OpenFile(path_file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-    if err != nil {
+	if err != nil {
 		log.Fatalf("Error while opening file for writing: %s, err: %v", path_file, err)
-        panic(err)
-    }
+		panic(err)
+	}
 
 	n, err := f.WriteString(contents)
 	if err != nil {
@@ -111,7 +111,7 @@ func write(path string, file_name string, contents string) {
 	defer f.Close()
 }
 
-func create_file(file_name string, path string){
+func create_file(file_name string, path string) {
 	path_file := path + file_name
 
 	log.Print("create file: ", file_name)
@@ -123,22 +123,21 @@ func create_file(file_name string, path string){
 	defer f.Close()
 }
 
-
 func hashKey(key string, R int) int {
-    h := fnv.New32a()
-    h.Write([]byte(key))
-	log.Print("HASHING RESULT: ", int(h.Sum32()) % R, " WITH WORD: ", h)
-    return int(h.Sum32()) % R
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	log.Print("HASHING RESULT: ", int(h.Sum32())%R, " WITH WORD: ", h)
+	return int(h.Sum32()) % R
 }
 
-func get_file_name(task_id int, number_file string) string{
+func get_file_name(task_id int, number_file string) string {
 	strig_task_id := strconv.Itoa(task_id)
 	file_name := "mr-" + strig_task_id + "-" + number_file + ".txt"
 	return file_name
 }
 
-func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, reducers int32) []string{
-	
+func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, reducers int32) []string {
+
 	hash_lines := make(map[int]string)
 	var filenames []string
 
@@ -156,7 +155,7 @@ func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, 
 	}
 
 	i = 0
-	for (i<int(reducers)){
+	for i < int(reducers) {
 		contents := hash_lines[i]
 		file_name := get_file_name(int(task_id), strconv.Itoa(i))
 		write(path, file_name, contents)
@@ -203,12 +202,11 @@ func get_final_reduce(keyvalues [][]KeyValue) []KeyValue {
 	return result
 }
 
-
 func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string, failure_prob int32) {
 	/*
-			bug: realizar antes la escritura del archivo parcial y luego avisar al coordinador
-	        porque el coordinador piensa que la tarea se completo pero el worker no alcanzo a escribir el archivo
-			y despues el reduce no encuentra el archivo parcial
+				bug: realizar antes la escritura del archivo parcial y luego avisar al coordinador
+		        porque el coordinador piensa que la tarea se completo pero el worker no alcanzo a escribir el archivo
+				y despues el reduce no encuentra el archivo parcial
 	*/
 	var still_working bool = true
 	for still_working {
@@ -252,7 +250,7 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 			final_reduce := get_final_reduce(reduce_results)
 
 			strig_task_id := strconv.Itoa(int(result.TaskId))
-			file_name := "mr-out-" + strig_task_id + ".txt" 
+			file_name := "mr-out-" + strig_task_id + ".txt"
 
 			commit_reduce(final_reduce, result_path, file_name)
 
