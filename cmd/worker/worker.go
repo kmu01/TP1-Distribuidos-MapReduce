@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"hash/fnv"
 	"log"
+	config "mapreduce-tp/common"
 	"mapreduce-tp/common/protos"
 	mapreduceseq "mapreduce-tp/seq"
 	"math/rand"
@@ -13,10 +16,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Task int32
@@ -25,12 +24,6 @@ type KeyValue struct {
 	Key   string
 	Value string
 }
-
-const (
-	Map    Task = 0
-	Reduce Task = 1
-	Finish Task = 2
-)
 
 const parcial_path = "filesystem/parcial_result/"
 const result_path = "filesystem/final_result/"
@@ -55,57 +48,17 @@ func run_map(file string, map_function func(string, string) []mapreduceseq.KeyVa
 	return kva
 }
 
-func run_reduce(file string, reduce_function func(string, []string) string) []KeyValue {
-	file_path := "filesystem/parcial_result/" + file
-
-	content, err := os.ReadFile(file_path)
-
-	if err != nil {
-		log.Fatalf("cannot read %v: %v", file, err)
-	}
-
-	lines := strings.Split(string(content), "\n")
-	var kvs []KeyValue
-	for index := range lines {
-		if lines[index] == "" {
-			continue
-		}
-		splits := strings.Split(lines[index], " ")
-		kv := KeyValue{Key: splits[0], Value: splits[1]}
-		kvs = append(kvs, kv)
-	}
-
-	groups := make(map[string][]string)
-	for _, kv := range kvs {
-		groups[kv.Key] = append(groups[kv.Key], kv.Value)
-	}
-
-	var results []KeyValue
-	for k, v := range groups {
-		output := reduce_function(k, v)
-		results = append(results, KeyValue{Key: k, Value: output})
-	}
-
-	// kva := reduce_function(file, string(groups))
-	return results
-	// return "resultados"
-}
-
 func write(path string, file_name string, contents string) {
 	path_file := path + file_name
-	log.Print("writing in path file: ", path_file)
-
 	f, err := os.OpenFile(path_file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Fatalf("Error while opening file for writing: %s, err: %v", path_file, err)
 		panic(err)
 	}
-
 	n, err := f.WriteString(contents)
 	if err != nil {
 		panic(err)
 	}
-
 	log.Print("Bytes written: ", n)
 	f.Sync()
 	defer f.Close()
@@ -113,10 +66,7 @@ func write(path string, file_name string, contents string) {
 
 func create_file(file_name string, path string) {
 	path_file := path + file_name
-
-	log.Print("create file: ", file_name)
 	f, err := os.Create(path_file)
-
 	if err != nil {
 		panic(err)
 	}
@@ -126,47 +76,50 @@ func create_file(file_name string, path string) {
 func hashKey(key string, R int) int {
 	h := fnv.New32a()
 	h.Write([]byte(key))
-	log.Print("HASHING RESULT: ", int(h.Sum32())%R, " WITH WORD: ", h)
 	return int(h.Sum32()) % R
 }
 
-func get_file_name(task_id int, number_file string) string {
-	strig_task_id := strconv.Itoa(task_id)
-	file_name := "mr-" + strig_task_id + "-" + number_file + ".txt"
+func get_parcial_file_name(task_id int32, number_file int) string {
+	int_task_id := int(task_id)
+	number_file_string := strconv.Itoa(number_file)
+	strig_task_id := strconv.Itoa(int_task_id)
+	file_name := "mr-" + strig_task_id + "-" + number_file_string + ".txt"
 	return file_name
 }
 
-func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, reducers int32) []string {
-
-	hash_lines := make(map[int]string)
+func create_parcial_files(reducers int32, task_id int32, path string) []string {
 	var filenames []string
-
-	i := 0
-	for i < int(reducers) {
-		file_name := get_file_name(int(task_id), strconv.Itoa(i))
+	index := 0
+	for index < int(reducers) {
+		file_name := get_parcial_file_name(task_id, index)
 		create_file(file_name, path)
 		filenames = append(filenames, file_name)
-		i++
+		index++
 	}
+	return filenames
+}
+
+func write_parcial_files(hash_lines map[int]string, reducers int32, task_id int32, path string) {
+	index := 0
+	for index < int(reducers) {
+		contents := hash_lines[index]
+		file_name := get_parcial_file_name(task_id, index)
+		write(path, file_name, contents)
+		index++
+	}
+}
+
+func get_hash_lines(map_result []mapreduceseq.KeyValue, reducers int32) map[int]string {
+	hash_lines := make(map[int]string)
 	for _, v := range map_result {
 		line_string := v.Key + " " + v.Value + "\n"
 		num_hash := hashKey(line_string, int(reducers))
 		hash_lines[num_hash] += line_string
 	}
-
-	i = 0
-	for i < int(reducers) {
-		contents := hash_lines[i]
-		file_name := get_file_name(int(task_id), strconv.Itoa(i))
-		write(path, file_name, contents)
-		log.Printf("Map commited: %s", file_name)
-		i++
-	}
-
-	return filenames
+	return hash_lines
 }
 
-func commit_reduce(contents []KeyValue, path string, file_name string) {
+func get_reduce_contents(contents []KeyValue) string {
 	// Ordenar resultados alfabéticamente por clave (Para comparar con la version secuencial)
 	sort.Slice(contents, func(i, j int) bool {
 		return contents[i].Key < contents[j].Key
@@ -177,13 +130,11 @@ func commit_reduce(contents []KeyValue, path string, file_name string) {
 		lines = append(lines, line_string)
 	}
 	result := strings.Join(lines, "\n")
-	write(path, file_name, result)
-	log.Printf("Reduce commited: %s", file_name)
+	return result
 }
 
 func get_final_reduce(keyvalues [][]KeyValue) []KeyValue {
 	counts := make(map[string]int)
-
 	for _, list := range keyvalues {
 		for _, kv := range list {
 			v, err := strconv.Atoi(kv.Value)
@@ -193,74 +144,115 @@ func get_final_reduce(keyvalues [][]KeyValue) []KeyValue {
 			counts[kv.Key] += v
 		}
 	}
-
 	result := make([]KeyValue, 0, len(counts))
 	for k, v := range counts {
 		result = append(result, KeyValue{Key: k, Value: strconv.Itoa(v)})
 	}
-
 	return result
 }
 
+func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, reducers int32) []string {
+	filenames := create_parcial_files(reducers, task_id, path)
+	hash_lines := get_hash_lines(map_result, reducers)
+	write_parcial_files(hash_lines, reducers, task_id, path)
+	log.Printf("Map commited")
+	return filenames
+}
+
+func run_reduce(file string, reduce_function func(string, []string) string) []KeyValue {
+	file_path := parcial_path + file
+	content, err := os.ReadFile(file_path)
+	if err != nil {
+		log.Fatalf("cannot read %v: %v", file, err)
+	}
+	lines := strings.Split(string(content), "\n")
+	var kvs []KeyValue
+	for index := range lines {
+		if lines[index] == "" {
+			continue
+		}
+		splits := strings.Split(lines[index], " ")
+		kv := KeyValue{Key: splits[0], Value: splits[1]}
+		kvs = append(kvs, kv)
+	}
+	groups := make(map[string][]string)
+	for _, kv := range kvs {
+		groups[kv.Key] = append(groups[kv.Key], kv.Value)
+	}
+	var results []KeyValue
+	for k, v := range groups {
+		output := reduce_function(k, v)
+		results = append(results, KeyValue{Key: k, Value: output})
+	}
+	return results
+}
+
+func exec_map(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, result *protos.GiveTask) {
+	log.Print("MAP task assigned")
+	map_result := run_map(result.Files[0], map_function)
+	file_names := commit_map(map_result, parcial_path, result.TaskId, result.Reducers)
+	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileNames: file_names})
+	if err != nil {
+		log.Fatalf("could not map: %v", err)
+	}
+}
+
+func get_final_file_name(task_id int32) string {
+	strig_task_id := strconv.Itoa(int(task_id))
+	file_name := "mr-out-" + strig_task_id + ".txt"
+	return file_name
+}
+
+func commit_reduce(contents []KeyValue, path string, task_id int32) {
+	file_name := get_final_file_name(task_id)
+	result := get_reduce_contents(contents)
+	write(path, file_name, result)
+	log.Printf("Reduce commited: %s", file_name)
+}
+
+func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduce_function func(string, []string) string, result *protos.GiveTask) {
+	log.Print("REDUCE task assigned")
+	reduce_results := [][]KeyValue{}
+
+	for _, file := range result.Files {
+		reduce_result := run_reduce(file, reduce_function)
+		reduce_results = append(reduce_results, reduce_result)
+	}
+
+	final_reduce_result := get_final_reduce(reduce_results)
+	commit_reduce(final_reduce_result, result_path, result.TaskId)
+
+	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId})
+	if err != nil {
+		log.Fatalf("could not reduce: %v", err)
+	}
+}
+
+func worker_failed(failure_prob int32) bool {
+	v := int32(rand.Intn(101))
+	return v < failure_prob
+}
+
 func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string, failure_prob int32) {
-	/*
-				bug: realizar antes la escritura del archivo parcial y luego avisar al coordinador
-		        porque el coordinador piensa que la tarea se completo pero el worker no alcanzo a escribir el archivo
-				y despues el reduce no encuentra el archivo parcial
-	*/
 	var still_working bool = true
 	for still_working {
-
 		log.Print("Asking for new task")
 		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
 		if err != nil {
 			log.Fatalf("could not connect: %v", err)
 		}
 
-		v := int32(rand.Intn(101))
-		if v < failure_prob {
-			log.Print("Probability failure encountered: EXIT")
+		if worker_failed(failure_prob) {
+			log.Print("Worker Failed. EXIT")
 			break
 		}
 
 		switch result.TypeTask {
-		case 0:
-			log.Print("MAP task assigned")
-			map_result := run_map(result.Files[0], map_function)
-
-			file_names := commit_map(map_result, parcial_path, result.TaskId, result.Reducers)
-
-			//    time.Sleep(1 * time.Second)
-			_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileNames: file_names})
-			if err != nil {
-				log.Fatalf("could not map: %v", err)
-			}
-		case 1:
-			log.Print("REDUCE task assigned")
-
-			reduce_results := [][]KeyValue{}
-
-			log.Print("RESULT TASK TO REDUCE: ", result)
-
-			for _, file := range result.Files {
-				reduce_result := run_reduce(file, reduce_function)
-				reduce_results = append(reduce_results, reduce_result)
-			}
-
-			final_reduce := get_final_reduce(reduce_results)
-
-			strig_task_id := strconv.Itoa(int(result.TaskId))
-			file_name := "mr-out-" + strig_task_id + ".txt"
-
-			commit_reduce(final_reduce, result_path, file_name)
-
-			time.Sleep(1 * time.Second)
-			_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId})
-			if err != nil {
-				log.Fatalf("could not map: %v", err)
-			}
+		case int32(config.Map):
+			exec_map(ctx, connection, map_function, result)
+		case int32(config.Reduce):
+			exec_reduce(ctx, connection, reduce_function, result)
 		default:
-			log.Print("No tasks available")
 			still_working = false
 		}
 	}
@@ -272,7 +264,7 @@ func get_map_reduce_functions(pluginFile string) (func(string, string) []mapredu
 		log.Fatalf("cannot load plugin %v: %v", pluginFile, err)
 	}
 
-	// Buscar función Map
+	// busca funcion map
 	xmapf, err := p.Lookup("Map")
 	if err != nil {
 		log.Fatalf("cannot find Map in %v: %v", pluginFile, err)
@@ -282,7 +274,7 @@ func get_map_reduce_functions(pluginFile string) (func(string, string) []mapredu
 		log.Fatalf("Map has wrong signature in %v", pluginFile)
 	}
 
-	// Buscar función Reduce
+	// busca funcion reduce
 	xreducef, err := p.Lookup("Reduce")
 	if err != nil {
 		log.Fatalf("cannot find Reduce in %v: %v", pluginFile, err)
