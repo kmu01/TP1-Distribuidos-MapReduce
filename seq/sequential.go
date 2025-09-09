@@ -7,8 +7,8 @@ import (
 )
 
 type KeyValue struct {
-    Key   string
-    Value string
+	Key   string
+	Value string
 }
 
 type MapFunc func(string, string) []KeyValue
@@ -25,7 +25,7 @@ func Sequential(files []string, mapf MapFunc, reducef ReduceFunc) []KeyValue {
 		}
 		kva := mapf(filename, string(content))
 		intermediate = append(intermediate, kva...)
-	} 
+	}
 
 	// Agrupar por key
 	groups := make(map[string][]string)

@@ -11,14 +11,15 @@ message RequestTask {}
 
 message GiveTask {
     int32 type_task = 1;
-    string file = 2; 
+    repeated string file = 2; 
     int32 task_id = 3;
     int32 worker_id = 4;
+    int32 reducers = 5;
 }
 
 message TaskResult {
     int32 worker_id = 1;
-    string file_name = 2;
+    repeated string file_names = 2;
 }
 
 message Ack {

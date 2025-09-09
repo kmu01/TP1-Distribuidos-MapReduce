@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"mapreduce-tp/seq"  
+	"mapreduce-tp/seq"
 	"os"
 	"plugin"
 )

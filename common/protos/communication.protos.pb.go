@@ -63,6 +63,7 @@ type GiveTask struct {
 	File          string                 `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
 	TaskId        int32                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	WorkerId      int32                  `protobuf:"varint,4,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Reducers      int32                  `protobuf:"varint,5,opt,name=reducers,proto3" json:"reducers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -125,10 +126,17 @@ func (x *GiveTask) GetWorkerId() int32 {
 	return 0
 }
 
+func (x *GiveTask) GetReducers() int32 {
+	if x != nil {
+		return x.Reducers
+	}
+	return 0
+}
+
 type TaskResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WorkerId      int32                  `protobuf:"varint,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
-	FileName      string                 `protobuf:"bytes,2,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	FileNames     []string               `protobuf:"bytes,2,rep,name=file_names,json=fileNames,proto3" json:"file_names,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -170,11 +178,11 @@ func (x *TaskResult) GetWorkerId() int32 {
 	return 0
 }
 
-func (x *TaskResult) GetFileName() string {
+func (x *TaskResult) GetFileNames() []string {
 	if x != nil {
-		return x.FileName
+		return x.FileNames
 	}
-	return ""
+	return nil
 }
 
 type Ack struct {
@@ -226,16 +234,18 @@ var File_common_protos_communication_protos protoreflect.FileDescriptor
 const file_common_protos_communication_protos_rawDesc = "" +
 	"\n" +
 	"\"common/protos/communication.protos\"\r\n" +
-	"\vRequestTask\"q\n" +
+	"\vRequestTask\"\x8d\x01\n" +
 	"\bGiveTask\x12\x1b\n" +
 	"\ttype_task\x18\x01 \x01(\x05R\btypeTask\x12\x12\n" +
 	"\x04file\x18\x02 \x01(\tR\x04file\x12\x17\n" +
 	"\atask_id\x18\x03 \x01(\x05R\x06taskId\x12\x1b\n" +
-	"\tworker_id\x18\x04 \x01(\x05R\bworkerId\"F\n" +
+	"\tworker_id\x18\x04 \x01(\x05R\bworkerId\x12\x1a\n" +
+	"\breducers\x18\x05 \x01(\x05R\breducers\"H\n" +
 	"\n" +
 	"TaskResult\x12\x1b\n" +
-	"\tworker_id\x18\x01 \x01(\x05R\bworkerId\x12\x1b\n" +
-	"\tfile_name\x18\x02 \x01(\tR\bfileName\"(\n" +
+	"\tworker_id\x18\x01 \x01(\x05R\bworkerId\x12\x1d\n" +
+	"\n" +
+	"file_names\x18\x02 \x03(\tR\tfileNames\"(\n" +
 	"\x03Ack\x12!\n" +
 	"\fcommit_state\x18\x01 \x01(\x05R\vcommitState2[\n" +
 	"\vCoordinator\x12'\n" +
