@@ -4,49 +4,22 @@ import (
 	"context"
 	"fmt"
 	"log"
+	config "mapreduce-tp/common"
 	"mapreduce-tp/common/protos"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 )
 
-type TaskType int32
-
-const max_time_seconds = 10
-const reducers = 2
-
-const (
-	Map    TaskType = 0
-	Reduce TaskType = 1
-	Finish TaskType = 2
-)
-
-type TaskStatus int32
-
-const (
-	Available   TaskStatus = 0
-	Unavailable TaskStatus = 1
-	Completed   TaskStatus = 2
-)
-
-type TypeCommit int32
-
-const (
-	Accept TypeCommit = 1
-	Deny   TypeCommit = 2
-)
-
-type myCoordinatorServer struct {
-	protos.UnimplementedCoordinatorServer
-}
-
 type Coordinator struct {
 	workers           []Worker ///workers que estan activos
 	map_tasks         []Task   ///completed and not completed
-	reduce_tasks      []Task
+	reduce_tasks      map[int32]Task
 	finish_map_reduce bool
 	server            *grpc.Server
 	next_worker_id    int32
@@ -56,10 +29,10 @@ type Coordinator struct {
 
 type Task struct {
 	task_id   int32
-	task_type int32 //map/reduce/nothing
-	status    int32 //disponible/tomada/completada
-	file      []string
+	task_type config.TaskType   // map/reduce/nothing
+	status    config.TaskStatus // disponible/tomada/completada
 	time      time.Time
+	files     []string
 }
 
 type Worker struct {
@@ -70,19 +43,37 @@ type Worker struct {
 
 var coordinator = Coordinator{}
 
+type myCoordinatorServer struct {
+	protos.UnimplementedCoordinatorServer
+}
+
 func init_coordinator(files []string) {
 	coordinator.server = grpc.NewServer()
 	coordinator.next_worker_id = 0
-	coordinator.reducers = reducers
+	coordinator.reducers = config.Reducers
 	
 	var id int32 = 0
 	for _, filename := range files {
 		log.Print("Added new file to coordinator: ", filename)
-		new_task := Task{task_type: 0, status: 0, file: filename, task_id: id}
+
+		files := []string{filename}
+
+		new_task := Task{task_type: config.Map, status: config.Available, files: files, task_id: id}
 		coordinator.map_tasks = append(coordinator.map_tasks, new_task)
 		id += 1
 	}
 	coordinator.finish_map_reduce = false
+	coordinator.reduce_tasks = make(map[int32]Task)
+
+	for i := int32(0); i < coordinator.reducers; i++ {
+		task := Task{
+			task_id:   i,
+			task_type: config.Reduce,
+			status:    config.Available,
+			files:     []string{},
+		}
+		coordinator.reduce_tasks[i] = task
+	}
 }
 
 // respondemos al RequestTask del worker
@@ -98,21 +89,21 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 		task:   task,
 		status: 1,
 	}
-	if !coordinator.finish_map_reduce {
-		//log.Print("Assigned task ", task.task_id, " - type task: ", task.task_type)
-	}
-
-	if task.task_type == 0 {
-		return &protos.GiveTask{TypeTask: task.task_type, File: task.file[0], TaskId: task.task_id, WorkerId: coordinator.next_worker_id, Reducers: coordinator.reducers}, nil
-	}
-
+	// if !coordinator.finish_map_reduce {
+	//log.Print("Assigned task ", task.task_id, " - type task: ", task.task_type)
+	// }
 
 	coordinator.workers = append(coordinator.workers, worker)
 	if coordinator.finish_map_reduce {
 		log.Print("No more tasks")
 	}
-
-	return &protos.GiveTask{TypeTask: task.task_type, File: task.file[0], TaskId: task.task_id, WorkerId: coordinator.next_worker_id, Reducers: coordinator.reducers}, nil
+	return &protos.GiveTask{
+		TypeTask: int32(task.task_type),
+		Files:    task.files,
+		TaskId:   task.task_id,
+		WorkerId: coordinator.next_worker_id,
+		Reducers: config.Reducers,
+	}, nil
 }
 
 func fetch_task() *Task {
@@ -134,13 +125,13 @@ func fetch_map_task() *Task {
 		if task.status == 0 {
 			task.status = 1
 			task.time = time.Now()
-			log.Print("Assigned MAP task ", task.task_id, " - file: ", task.file)
+			log.Print("Assigned MAP task ", task.task_id, " - file: ", task.files)
 			return task
 		}
 	}
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
-		if task.status == 1 && (time.Since(task.time)).Seconds() >= max_time_seconds {
+		if task.status == 1 && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
 			log.Print("Time limit")
 			task.time = time.Now()
 			return task
@@ -180,34 +171,58 @@ func fetch_map_task() *Task {
 }
 
 func fetch_reduce_task() *Task {
-	for i := 0; i < len(coordinator.reduce_tasks); i++ {
-		task := &coordinator.reduce_tasks[i]
-		if task.status == 0 {
-			task.status = 1
+	
+	// If REDUCE task available
+	for _, task := range coordinator.reduce_tasks {
+		if task.status == config.Available {
+			task.status = config.Unavailable
 			task.time = time.Now()
-			log.Print("Assigned REDUCE task ", task.task_id, " - file: ", task.file)
-			return task
+			log.Print("Assigned REDUCE task ", task.task_id, " - file: ", task.files)
+			return &task
 		}
 	}
-	for i := 0; i < len(coordinator.reduce_tasks); i++ {
-		task := &coordinator.reduce_tasks[i]
-		if task.status == 1 && (time.Since(task.time)).Seconds() >= max_time_seconds {
-			log.Print("Time limit")
+	
+	//If REDUCE task not available, see if one is taking too long
+	for _, task := range coordinator.reduce_tasks{
+		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
+			log.Print("Reduced task has reached time limit")
 			task.time = time.Now()
-			return task
+			return &task
 		}
 	}
-
-	/*
-		for i := 0; i < len(coordinator.reduce_tasks); i++ {
-			task := &coordinator.reduce_tasks[i]
-			if task.status != 2{
-				task.time = time.Now()
-				return task
-			}
-		}
-	*/
+	
+	//If all RECUDED tasks are taken and on time, assign the first one unavailable
+	// for _, task := range coordinator.reduce_tasks {
+	// 	if task.status != config.Completed {
+	// 		task.time = time.Now()
+	// 		log.Print("Reduced task assigned just in case")
+	// 		return &task
+	// 	}
+	// }
 	return nil
+}
+
+func get_reducer_ID(file string) int {
+	base := strings.TrimSuffix(file, ".txt")
+	parts := strings.Split(base, "-") 
+	reducerStr := parts[len(parts)-1]
+	reducerID, err := strconv.Atoi(reducerStr)
+	if err != nil {
+		log.Fatalf("Invalid reducer id in filename %s: %v", file, err)
+	}
+	return reducerID
+}
+
+func assign_partial_results(file_names []string) {
+	for _, file := range file_names {
+		reducer_id := get_reducer_ID(file)
+
+		log.Print("REDUCER ID: ", reducer_id, " FROM: ", file)
+
+		task := coordinator.reduce_tasks[int32(reducer_id)]
+		task.files = append(task.files, file)
+		coordinator.reduce_tasks[int32(reducer_id)] = task
+	}
 }
 
 func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.TaskResult) (*protos.Ack, error) {
@@ -215,9 +230,12 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 	var worker_task *Task
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
-	// revisar
+	
+	
+	// CUIDADO CON USAR WORKER ID COMO TASK IDS
+	var task_id int32
 	for i := int32(0); i < int32(len(coordinator.workers)); i++ {
-		task_id := coordinator.workers[i].id
+		task_id = coordinator.workers[i].id
 		if task_id == result.WorkerId {
 			worker_position = i
 			worker_task = coordinator.workers[i].task
@@ -229,11 +247,14 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 	if worker_task.status == 2 {
 		return &protos.Ack{CommitState: 2}, nil
 	}
-	worker_task.status = 2
+	worker_task.status = config.Completed
 
-	if worker_task.task_type == 0 {
-		new_task := Task{task_id: worker_task.task_id, task_type: 1, status: 0, file: result.FileNames} //crea reduce
-		coordinator.reduce_tasks = append(coordinator.reduce_tasks, new_task)
+	if worker_task.task_type == config.Map {
+		assign_partial_results(result.FileNames)
+	} else if worker_task.task_type == config.Reduce {
+		task := coordinator.reduce_tasks[task_id]
+		task.status = config.Completed
+		coordinator.reduce_tasks[task_id] = task
 	}
 	return &protos.Ack{CommitState: 1}, nil
 }

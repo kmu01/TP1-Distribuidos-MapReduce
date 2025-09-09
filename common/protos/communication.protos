@@ -11,7 +11,7 @@ message RequestTask {}
 
 message GiveTask {
     int32 type_task = 1;
-    repeated string file = 2; 
+    repeated string files = 2; 
     int32 task_id = 3;
     int32 worker_id = 4;
     int32 reducers = 5;
