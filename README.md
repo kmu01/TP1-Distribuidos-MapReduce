@@ -28,8 +28,8 @@ A single worker with the `p` plugin and a `n`% probability of failure
 go run ./cmd/worker/worker.go ./plugins/p.so <n>
 ```
 
-Multiple workers (see the bash file to set the plugin, the number of workers and the failure probability)
+Coordinator with multiple workers (see the bash file to set the plugin, the number of workers and the failure probability)
 
 ```bash
-./run_workers.sh
+./run_mr.sh
 ```
