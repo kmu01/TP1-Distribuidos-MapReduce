@@ -96,6 +96,13 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	coordinator.workers = append(coordinator.workers, worker)
 	if coordinator.finish_map_reduce {
 		log.Print("No more tasks")
+		return &protos.GiveTask{
+			TypeTask: int32(2),
+			Files:    task.files,
+			TaskId:   task.task_id,
+			WorkerId: coordinator.next_worker_id,
+			Reducers: config.Reducers,
+		}, nil
 	}
 	return &protos.GiveTask{
 		TypeTask: int32(task.task_type),
@@ -138,6 +145,7 @@ func fetch_map_task() *Task {
 		}
 	}
 
+	// REVISAR
 	/*
 		Si todos los workers ya tomaron sus tareas (status == 1),
 		pero no expiró el timeout, este for igual reasigna
@@ -158,47 +166,45 @@ func fetch_map_task() *Task {
 		la reasigna y ahora dos workers ejecutan la misma tarea.
 
 	*/
-	/*
-		for i := 0; i < len(coordinator.map_tasks); i++ {
-			task := &coordinator.map_tasks[i]
-			if task.status != 2 {
-				task.time = time.Now()
-				return task
-			}
+
+	// PREGUNTAR ESTE CASO PARTICULAR
+	for i := 0; i < len(coordinator.map_tasks); i++ {
+		task := &coordinator.map_tasks[i]
+		if task.status != 2 {
+			task.time = time.Now()
+			return task
 		}
-	*/
+	}
+
 	return nil
 }
 
 func fetch_reduce_task() *Task {
 	
 	// If REDUCE task available
-	for _, task := range coordinator.reduce_tasks {
-		if task.status == config.Available {
-			task.status = config.Unavailable
+	for id, task := range coordinator.reduce_tasks {
+		if task.status == 0 {
+			task.status = 1
 			task.time = time.Now()
+			coordinator.reduce_tasks[id] = task
+			log.Print("tomada Task desocupada")
 			log.Print("Assigned REDUCE task ", task.task_id, " - file: ", task.files)
 			return &task
 		}
 	}
 	
 	//If REDUCE task not available, see if one is taking too long
-	for _, task := range coordinator.reduce_tasks{
-		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
+	for id, task := range coordinator.reduce_tasks{
+		if task.status == 1 && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
 			log.Print("Reduced task has reached time limit")
+			log.Print("tomada Task demorada")
 			task.time = time.Now()
+			coordinator.reduce_tasks[id] = task
 			return &task
 		}
 	}
 	
 	//If all RECUDED tasks are taken and on time, assign the first one unavailable
-	// for _, task := range coordinator.reduce_tasks {
-	// 	if task.status != config.Completed {
-	// 		task.time = time.Now()
-	// 		log.Print("Reduced task assigned just in case")
-	// 		return &task
-	// 	}
-	// }
 	return nil
 }
 
