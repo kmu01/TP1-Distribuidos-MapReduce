@@ -7,6 +7,8 @@ N=${1:-3}  # Número de workers, por defecto 3 si no se especifica
 PLUGIN=${2:-plugins/wc.so}  # Plugin a usar, por defecto wc.so
 FAILURE_PROB=0
 
+mkdir logs
+
 if [ -z "$N" ] || [ -z "$PLUGIN" ]; then
     echo "Uso: $0 <N> <plugin>"
     exit 1
