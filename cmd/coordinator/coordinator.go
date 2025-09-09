@@ -92,9 +92,7 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	coordinator.workers = append(coordinator.workers, worker)
 	if coordinator.finish_map_reduce {
 		log.Print("No more tasks")
-		return &protos.GiveTask{
-			TypeTask: int32(config.Finish),
-		}, nil
+		defer coordinator.server.Stop()
 	}
 	return &protos.GiveTask{
 		TypeTask: int32(task.task_type),

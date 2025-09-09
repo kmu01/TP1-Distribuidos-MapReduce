@@ -193,7 +193,7 @@ func exec_map(ctx context.Context, connection protos.CoordinatorClient, map_func
 	file_names := commit_map(map_result, parcial_path, result.TaskId, result.Reducers)
 	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileNames: file_names})
 	if err != nil {
-		log.Fatalf("could not map: %v", err)
+		log.Fatalf("could not map, reduce_map might been finished:: %v", err)
 	}
 }
 
@@ -224,7 +224,7 @@ func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduc
 
 	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId})
 	if err != nil {
-		log.Fatalf("could not reduce: %v", err)
+		log.Fatalf("could not reduce, reduce_map might been finished:: %v", err)
 	}
 }
 
@@ -239,7 +239,7 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 		log.Print("Asking for new task")
 		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
 		if err != nil {
-			log.Fatalf("could not connect: %v", err)
+			log.Fatalf("Could not connect with coordinator, reduce_map might been finished: %v", err)
 		}
 
 		if worker_failed(failure_prob) {
