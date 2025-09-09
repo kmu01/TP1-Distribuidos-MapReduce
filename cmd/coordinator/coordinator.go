@@ -112,7 +112,7 @@ func fetch_task() *Task {
 		task = fetch_reduce_task()
 	}
 	if task == nil {
-		task = &Task{task_type: 2, status: 0}
+		task = &Task{task_type: config.Finish, status: config.Available}
 		coordinator.finish_map_reduce = true
 	}
 	return task
