@@ -157,7 +157,6 @@ func fetch_reduce_task() *Task {
 			task.status = 1
 			task.time = time.Now()
 			coordinator.reduce_tasks[id] = task
-			log.Print("tomada Task desocupada")
 			log.Print("Assigned REDUCE task ", task.task_id, " - file: ", task.files)
 			return &task
 		}

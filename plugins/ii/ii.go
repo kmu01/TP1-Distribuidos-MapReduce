@@ -1,7 +1,8 @@
 package main
 
 import (
-	"mapreduce-tp/seq"
+	"log"
+	mapreduceseq "mapreduce-tp/seq"
 	"sort"
 	"strings"
 	"unicode"
@@ -23,6 +24,7 @@ func Map(filename string, contents string) []mapreduceseq.KeyValue {
 
 // Reduce: recibe (word, [docIDs...]) y devuelve (word, lista ordenada y única de docIDs)
 func Reduce(key string, values []string) string {
+	log.Print("[REDUCE] key: ",key, " values: ", values)
 	seen := make(map[string]bool)
 	unique := []string{}
 

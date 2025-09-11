@@ -6,6 +6,7 @@ Build the plugins
 
 ```bash
 go build -buildmode=plugin -o plugins/ii.so plugins/ii/ii.go
+go build -buildmode=plugin -o plugins/wc.so plugins/wc/wc.go
 ```
 
 Build the protos

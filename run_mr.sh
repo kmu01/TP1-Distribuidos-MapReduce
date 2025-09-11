@@ -3,8 +3,8 @@
 # Uso: ./run_workers.sh <N> <plugin>
 # Ejemplo: ./run_workers.sh 5 plugins/wc.so
 
-N=${1:-3}  # Número de workers, por defecto 3 si no se especifica
-PLUGIN=${2:-plugins/wc.so}  # Plugin a usar, por defecto wc.so
+N=${1:-1}  # Número de workers, por defecto 3 si no se especifica
+PLUGIN=${2:-plugins/ii.so}  # Plugin a usar, por defecto wc.so
 FAILURE_PROB=0
 
 mkdir logs

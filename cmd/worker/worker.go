@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"hash/fnv"
 	"log"
 	config "mapreduce-tp/common"
@@ -16,6 +14,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Task int32
@@ -133,7 +134,9 @@ func get_reduce_contents(contents []KeyValue) string {
 	return result
 }
 
+/// ACA ESTA EL PROBLEMA ---> HAY QUE PASARLO ADENTRO DEL REDUC
 func get_final_reduce(keyvalues [][]KeyValue) []KeyValue {
+	log.Print("[GET FINAL REDUCE] keyvalues: ", keyvalues)
 	counts := make(map[string]int)
 	for _, list := range keyvalues {
 		for _, kv := range list {
@@ -141,7 +144,7 @@ func get_final_reduce(keyvalues [][]KeyValue) []KeyValue {
 			if err != nil {
 				continue
 			}
-			counts[kv.Key] += v
+			counts[kv.Key] += v // PARA WC SUMAR Y PARA II APENDEAR PATHS (cuidado con paths repetidos)
 		}
 	}
 	result := make([]KeyValue, 0, len(counts))
@@ -181,7 +184,9 @@ func run_reduce(file string, reduce_function func(string, []string) string) []Ke
 	}
 	var results []KeyValue
 	for k, v := range groups {
+		log.Print("antes del reduce con key: ", k, " value: ", v)
 		output := reduce_function(k, v)
+		log.Print("despues dle reduce: ", output)
 		results = append(results, KeyValue{Key: k, Value: output})
 	}
 	return results
@@ -219,12 +224,17 @@ func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduc
 		reduce_results = append(reduce_results, reduce_result)
 	}
 
+	log.Print("LOS RESULTADOS FINALES DE CORRER REDUCE: ",reduce_results)
+
 	final_reduce_result := get_final_reduce(reduce_results)
+
+	log.Print("LOS RESULTADOS FINALES FINALES DE CORRER REDUCE: ",final_reduce_result)
+	
 	commit_reduce(final_reduce_result, result_path, result.TaskId)
 
 	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId})
 	if err != nil {
-		log.Fatalf("could not reduce, reduce_map might been finished:: %v", err)
+		log.Fatal("Connection with coordinator Failed: Tasks might be done.")
 	}
 }
 
@@ -239,7 +249,7 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 		log.Print("Asking for new task")
 		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
 		if err != nil {
-			log.Fatalf("Could not connect with coordinator, reduce_map might been finished: %v", err)
+			log.Fatal("Connection with coordinator Failed: Tasks might be done.")
 		}
 
 		if worker_failed(failure_prob) {
