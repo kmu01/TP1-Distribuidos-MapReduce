@@ -114,7 +114,7 @@ func get_hash_lines(map_result []mapreduceseq.KeyValue, reducers int32) map[int]
 	hash_lines := make(map[int]string)
 	for _, v := range map_result {
 		line_string := v.Key + " " + v.Value + "\n"
-		num_hash := hashKey(line_string, int(reducers))
+		num_hash := hashKey(v.Key, int(reducers))
 		hash_lines[num_hash] += line_string
 	}
 	return hash_lines
@@ -134,26 +134,6 @@ func get_reduce_contents(contents []KeyValue) string {
 	return result
 }
 
-/// ACA ESTA EL PROBLEMA ---> HAY QUE PASARLO ADENTRO DEL REDUC
-func get_final_reduce(keyvalues [][]KeyValue) []KeyValue {
-	log.Print("[GET FINAL REDUCE] keyvalues: ", keyvalues)
-	counts := make(map[string]int)
-	for _, list := range keyvalues {
-		for _, kv := range list {
-			v, err := strconv.Atoi(kv.Value)
-			if err != nil {
-				continue
-			}
-			counts[kv.Key] += v // PARA WC SUMAR Y PARA II APENDEAR PATHS (cuidado con paths repetidos)
-		}
-	}
-	result := make([]KeyValue, 0, len(counts))
-	for k, v := range counts {
-		result = append(result, KeyValue{Key: k, Value: strconv.Itoa(v)})
-	}
-	return result
-}
-
 func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, reducers int32) []string {
 	filenames := create_parcial_files(reducers, task_id, path)
 	hash_lines := get_hash_lines(map_result, reducers)
@@ -162,7 +142,7 @@ func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, 
 	return filenames
 }
 
-func run_reduce(file string, reduce_function func(string, []string) string) []KeyValue {
+func run_reduce(file string) []KeyValue {
 	file_path := parcial_path + file
 	content, err := os.ReadFile(file_path)
 	if err != nil {
@@ -178,18 +158,7 @@ func run_reduce(file string, reduce_function func(string, []string) string) []Ke
 		kv := KeyValue{Key: splits[0], Value: splits[1]}
 		kvs = append(kvs, kv)
 	}
-	groups := make(map[string][]string)
-	for _, kv := range kvs {
-		groups[kv.Key] = append(groups[kv.Key], kv.Value)
-	}
-	var results []KeyValue
-	for k, v := range groups {
-		log.Print("antes del reduce con key: ", k, " value: ", v)
-		output := reduce_function(k, v)
-		log.Print("despues dle reduce: ", output)
-		results = append(results, KeyValue{Key: k, Value: output})
-	}
-	return results
+	return kvs
 }
 
 func exec_map(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, result *protos.GiveTask) {
@@ -217,21 +186,70 @@ func commit_reduce(contents []KeyValue, path string, task_id int32) {
 
 func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduce_function func(string, []string) string, result *protos.GiveTask) {
 	log.Print("REDUCE task assigned")
-	reduce_results := [][]KeyValue{}
+	/*
+				Archivos parciales
+				mr-0-0.txt: hola 1, mundo 1, hola 1
+				mr-0-1.txt: mundo 1, hola 1
 
+				mr-0-0.txt: hola archivo1.txt, mundo archivo2.txt, hola archivo2.txt
+		        mr-0-1.txt: mundo archivo1.txt, hola archivo3.txt
+	*/
+
+	// Lee estos archivos parciales y junta los pares KeyValue
+	var allKVs []KeyValue
 	for _, file := range result.Files {
-		reduce_result := run_reduce(file, reduce_function)
-		reduce_results = append(reduce_results, reduce_result)
+		kvs := run_reduce(file)
+		allKVs = append(allKVs, kvs...)
 	}
 
-	log.Print("LOS RESULTADOS FINALES DE CORRER REDUCE: ",reduce_results)
+	/*
+				allKVs = [("hola", "1"),
+					("mundo", "1"),
+					("hola", "1"),
+					("mundo", "1"),
+					("hola", "1")]
 
-	final_reduce_result := get_final_reduce(reduce_results)
+				allKVs = [("hola", "archivo1.txt"),
+		                  ("mundo", "archivo2.txt"),
+		                  ("hola", "archivo2.txt"),
+		                  ("mundo", "archivo1.txt"),
+		                  ("hola", "archivo3.txt")]
+	*/
 
-	log.Print("LOS RESULTADOS FINALES FINALES DE CORRER REDUCE: ",final_reduce_result)
-	
-	commit_reduce(final_reduce_result, result_path, result.TaskId)
+	// Se agrupa por palabra
+	groups := make(map[string][]string)
+	for _, kv := range allKVs {
+		groups[kv.Key] = append(groups[kv.Key], kv.Value)
+	}
+	/*
+				groups["hola"] = ["1", "1", "1"]
+				groups["mundo"] = ["1", "1"]
 
+				groups["hola"] = ["archivo1.txt", "archivo2.txt", "archivo3.txt"]
+		        groups["mundo"] = ["archivo2.txt", "archivo1.txt"]
+	*/
+
+	// Invocar el reduce del plugin
+	var finalResults []KeyValue
+	for k, v := range groups {
+		output := reduce_function(k, v)
+		finalResults = append(finalResults, KeyValue{Key: k, Value: output})
+	}
+	/*
+				hola 3
+				mundo 2
+
+				hola archivo1.txt,archivo2.txt,archivo3.txt
+		        mundo archivo1.txt,archivo2.txt
+	*/
+
+	// Orden alfabetico
+	sort.Slice(finalResults, func(i, j int) bool {
+		return finalResults[i].Key < finalResults[j].Key
+	})
+
+	// Commiteo
+	commit_reduce(finalResults, result_path, result.TaskId)
 	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId})
 	if err != nil {
 		log.Fatal("Connection with coordinator Failed: Tasks might be done.")
