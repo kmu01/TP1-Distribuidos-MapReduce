@@ -17,6 +17,12 @@ protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=p
 
 ### How to run the service
 
+Run everything together with `N` workers, plugin `p` and `P` probability of failure
+
+```bash
+./run_mr.sh <N> plugins/<p> <P>
+```
+
 Run the coordinator
 
 ```bash
@@ -29,8 +35,8 @@ A single worker with the `p` plugin and a `n`% probability of failure
 go run ./cmd/worker/worker.go ./plugins/p.so <n>
 ```
 
-Coordinator with multiple workers (see the bash file to set the plugin, the number of workers and the failure probability)
+To run sequentially
 
 ```bash
-./run_mr.sh
+go run cmd/seq/mainseq.go plugins/wc.so filesystem/pg/pg-*.txt
 ```

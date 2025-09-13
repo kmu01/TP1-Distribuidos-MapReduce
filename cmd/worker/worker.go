@@ -335,3 +335,4 @@ func main() {
 	ctx, connection := connect()
 	run_worker(ctx, connection, map_function, reduce_function, failure_prob)
 }
+	
