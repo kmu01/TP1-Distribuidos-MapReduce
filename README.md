@@ -17,10 +17,10 @@ protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=p
 
 ### How to run the service
 
-Run everything together with `N` workers, plugin `p` and `P` probability of failure
+Run everything together with `N` workers, plugin `plugin` and `P` probability of failure
 
 ```bash
-./run_mr.sh <N> plugins/<p> <P>
+./run_mr.sh <N> <plugin> <P>
 ```
 
 Run the coordinator

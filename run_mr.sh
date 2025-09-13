@@ -1,11 +1,11 @@
 #!/bin/bash
-# Script para levantar N workers de MapReduce junto con su coordinator
-# Uso: ./run_workers.sh <N> <plugin>
-# Ejemplo: ./run_workers.sh 5 plugins/wc.so
+# Script para levantar workers de MapReduce junto con su coordinator
+# Uso: ./run_mr.sh <N> <plugin> <P>
+# Ejemplo: ./run_mr.sh 5 wc 0.5
 
 N=${1:-3}  # Número de workers, por defecto 3 si no se especifica
-PLUGIN=${2:-plugins/wc.so}  # Plugin a usar, por defecto wc.so
-FAILURE_PROB=${3:-0} 
+PLUGIN=${2:-wc}  # Plugin a usar, por defecto wc
+FAILURE_PROB=${3:-0} #probabilidad de falla de worker, por defecto 0
 
 mkdir logs
 
@@ -21,7 +21,7 @@ echo "[Coordinator] Log: coordinator.log"
 
 for i in $(seq 1 $N); do
     echo "[Worker $i] Iniciando worker con plugin $PLUGIN..."
-    go run cmd/worker/worker.go $PLUGIN $FAILURE_PROB > logs/worker_$i.log 2>&1 &
+    go run cmd/worker/worker.go plugins/$PLUGIN.so $FAILURE_PROB > logs/worker_$i.log 2>&1 &
     echo "[Worker $i] Log: worker_$i.log"
 done
 
