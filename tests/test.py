@@ -55,7 +55,7 @@ def compare(reduces_dict) -> bool:
         return True
 
 
-def test_unit():
+def test_1():
     base_dir = Path("filesystem/pg")
     base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -93,5 +93,83 @@ def test_unit():
     f2.close()
 
 
+def test_2():
+    base_dir = Path("filesystem/pg")
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    f1 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt"
+    )
+    f1.write(b"HOla dON don senioR seNIoritOO pePItO!")
+    f1.flush()
+
+    f2 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt"
+    )
+    f2.write(b"HOLA dOn SENIOR JOSE!")
+    f2.flush()
+
+    # Correr secuencialmente
+    subprocess.run(
+        [
+            "go run cmd/seq/mainseq.go plugins/wc.so filesystem/pg/pg-*.txt",
+        ],
+        shell=True,
+        check=True,
+    )
+
+    # Correr concurrentemente
+    subprocess.run(["./run_mr.sh"], shell=True, check=True)
+
+    reduces = get_all_reduces()
+
+    assert compare(reduces), "Results differ"
+
+    print("[TEST UNIT] OK ☺️")
+
+    f1.close()
+    f2.close()
+
+def test_3():
+    base_dir = Path("filesystem/pg")
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    f1 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt"
+    )
+    f1.write(b"hola, hola. chau!")
+    f1.flush()
+
+    f2 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt"
+    )
+    f2.write(b"hola, hola. chau!")
+    f2.flush()
+
+    # Correr secuencialmente
+    subprocess.run(
+        [
+            "go run cmd/seq/mainseq.go plugins/wc.so filesystem/pg/pg-*.txt",
+        ],
+        shell=True,
+        check=True,
+    )
+
+    # Correr concurrentemente
+    subprocess.run(["./run_mr.sh"], shell=True, check=True)
+
+    reduces = get_all_reduces()
+
+    assert compare(reduces), "Results differ"
+
+    print("[TEST UNIT] OK ☺️")
+
+    f1.close()
+    f2.close()
+
 if __name__ == "__main__":
-    test_unit()
+    test_1()
+    test_2()
+    test_3()
+
+
