@@ -45,6 +45,7 @@ def get_all_reduces():
     return dict(final_result)
 
 
+
 def compare(reduces_dict) -> bool:
     with open("filesystem/final_result/sequential-out.txt", "r") as f:
         for line in f:
@@ -169,7 +170,3 @@ def test_3():
 
 if __name__ == "__main__":
     test_1()
-    test_2()
-    test_3()
-
-
