@@ -94,6 +94,12 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 		log.Print("No more tasks")
 		defer coordinator.server.Stop()
 	}
+
+	if task == nil {
+		log.Print("No task assigned")
+	}
+
+	log.Print("Task type: ", task.task_type)
 	return &protos.GiveTask{
 		TypeTask: int32(task.task_type),
 		Files:    task.files,
@@ -103,16 +109,64 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	}, nil
 }
 
+func allMapCompleted() bool {
+	for _, task := range coordinator.map_tasks {
+		log.Print("Map task ", task.task_id, " status: ", task.status)
+		if task.status != config.Completed {
+			return false
+		}
+	}
+	return true
+}
+
+func allReduceCompleted() bool {
+	for _, task := range coordinator.reduce_tasks {
+		log.Print("Reduce task ", task.task_id, " status: ", task.status)
+		if task.status != config.Completed {
+			return false
+		}
+	}
+	return true
+}
+
+func allTasksCompleted() bool {
+	for _, task := range coordinator.map_tasks {
+		log.Print("Map task ", task.task_id, " status: ", task.status)
+		if task.status != config.Completed {
+			return false
+		}
+	}
+
+	for _, task := range coordinator.reduce_tasks {
+		log.Print("Reduce task ", task.task_id, " status: ", task.status)
+		if task.status != config.Completed {
+			return false
+		}
+	}
+
+	return true
+}
+
 func fetch_task() *Task {
 	var task *Task
 	task = fetch_map_task()
 	if task == nil {
-		task = fetch_reduce_task()
+		//task = fetch_reduce_task()
+		if allMapCompleted() {
+			task = fetch_reduce_task()
+		} else {
+			return &Task{task_type: config.Wait, status: config.Available}
+		}
 	}
 	if task == nil {
-		task = &Task{task_type: config.Finish, status: config.Available}
-		coordinator.finish_map_reduce = true
+		if allReduceCompleted() {
+			coordinator.finish_map_reduce = true
+			return &Task{task_type: config.Finish, status: config.Available}
+		} else {
+			return &Task{task_type: config.Wait, status: config.Available}
+		}
 	}
+
 	return task
 }
 
@@ -222,19 +276,28 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 	if worker_task.task_type == config.Map {
 		assign_partial_results(result.FileNames)
 	} else if worker_task.task_type == config.Reduce {
-		task := coordinator.reduce_tasks[task_id]
+		task := coordinator.reduce_tasks[worker_task.task_id]
 		task.status = config.Completed
-		coordinator.reduce_tasks[task_id] = task
+		coordinator.reduce_tasks[worker_task.task_id] = task
 	}
+
+	/*
+		else if worker_task.task_type == config.Reduce {
+			task := coordinator.reduce_tasks[worker_task.task_id]
+			task.status = config.Completed
+			coordinator.reduce_tasks[worker_task.task_id] = task
+		}
+
+	*/
 	return &protos.Ack{CommitState: int32(config.Accept)}, nil
 }
 
 func start_server() {
-	if _, err := os.Stat(socketPath); err == nil {
-		os.Remove(socketPath)
+	if _, err := os.Stat(config.SocketPath); err == nil {
+		os.Remove(config.SocketPath)
 	}
 
-	lis, err := net.Listen("unix", socketPath)
+	lis, err := net.Listen("unix", config.SocketPath)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -242,20 +305,28 @@ func start_server() {
 	server := coordinator.server
 	service := &myCoordinatorServer{}
 	protos.RegisterCoordinatorServer(server, service)
-	log.Printf("Coordinator listening on unix socket %s", socketPath)
+	log.Printf("Coordinator listening on unix socket %s", config.SocketPath)
 	err = server.Serve(lis)
 	if err != nil {
 		log.Fatalf("cant serve: %s", err)
 	}
-	os.Remove(socketPath)
+	os.Remove(config.SocketPath)
 }
-
-const socketPath = "/tmp/mapreduce.sock"
 
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: go run coordinator.go file1.txt file2.txt ...\n")
 		os.Exit(1)
+	}
+
+	err := os.Mkdir(config.Result_path, 0755)
+	if err != nil {
+		log.Fatalf("Error creating result directory: %v", err)
+	}
+
+	err = os.Mkdir(config.Parcial_path, 0755)
+	if err != nil {
+		log.Fatalf("Error creating parcial directory: %v", err)
 	}
 
 	files := os.Args[1:]
