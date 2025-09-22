@@ -319,12 +319,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	err := os.Mkdir(config.Result_path, 0755)
+	err := os.MkdirAll(config.Result_path, 0755)
 	if err != nil {
 		log.Fatalf("Error creating result directory: %v", err)
 	}
 
-	err = os.Mkdir(config.Parcial_path, 0755)
+	err = os.MkdirAll(config.Parcial_path, 0755)
 	if err != nil {
 		log.Fatalf("Error creating parcial directory: %v", err)
 	}

@@ -47,7 +47,7 @@ func main() {
 	// Ejecutar secuencial
 	result := mapreduceseq.Sequential(files, mapf, reducef)
 
-	err = os.Mkdir(config.Result_path, 0755)
+	err = os.MkdirAll(config.Result_path, 0755)
 	if err != nil {
 		log.Fatalf("Error creating result directory: %v", err)
 	}
