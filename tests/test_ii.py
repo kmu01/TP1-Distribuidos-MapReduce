@@ -88,8 +88,6 @@ def test_1_ii():
     # Correr concurrentemente
     subprocess.run(["./run_mr.sh 3 ii 0"], shell=True, check=True)
 
-    sleep(3)
-
     reduces = get_all_reduces_ii()
 
     assert compare_ii(reduces), "Results differ"

@@ -16,13 +16,18 @@ fi
 
 echo "[Coordinator] Iniciando coordinator..."
 go run cmd/coordinator/coordinator.go filesystem/pg/pg-*.txt > logs/coordinator.log 2>&1 &
-echo "[Coordinator] Log: coordinator.log"
-
+COORD_PID=$!
 
 for i in $(seq 1 $N); do
     echo "[Worker $i] Iniciando worker con plugin $PLUGIN..."
     go run cmd/worker/worker.go plugins/$PLUGIN.so $FAILURE_PROB > logs/worker_$i.log 2>&1 &
-    echo "[Worker $i] Log: worker_$i.log"
+    WORKER_PIDS[$i]=$!
+done
+
+# Esperar a que todos los procesos terminen
+wait $COORD_PID
+for pid in ${WORKER_PIDS[@]}; do
+    wait $pid 2>/dev/null
 done
 
 echo "Se lanzo el algoritmo de map reduce en segundo plano"

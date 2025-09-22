@@ -92,9 +92,6 @@ def test_1():
     # Correr concurrentemente
     subprocess.run(["./run_mr.sh"], shell=True, check=True)
 
-    # Esperamos a que se creen todos los archivos
-    sleep(2)
-
     reduces = get_all_reduces()
 
     assert compare(reduces), "Results differ"
@@ -136,8 +133,6 @@ def test_2():
 
     # Correr concurrentemente
     subprocess.run(["./run_mr.sh"], shell=True, check=True)
-
-    sleep(2)
 
     reduces = get_all_reduces()
 
@@ -181,8 +176,6 @@ def test_3():
     # Correr concurrentemente
     subprocess.run(["./run_mr.sh"], shell=True, check=True)
 
-    sleep(2)
-
     reduces = get_all_reduces()
 
     assert compare(reduces), "Results differ"
@@ -202,13 +195,9 @@ def test_3():
 if __name__ == "__main__":
     print("Starting Test 1:")
     test_1()
-    print("Sleep 😴")
-    sleep(4)
 
     print("Starting Test 2:")
     test_2()
-    print("Sleep 😴")
-    sleep(4)
 
     print("Starting Test 3:")
     test_3()

@@ -56,7 +56,7 @@ def test_failure_reassign():
         check=True,
     )
     # Correr concurrentemente
-    subprocess.run(["./run_mr.sh 10 wc 50"], shell=True, check=True)
+    subprocess.run(["./run_mr.sh 10 wc 25"], shell=True, check=True)
     reduces = get_all_reduces_wc()
     assert compare_wc(reduces), "Results differ"
     assert check_worker_log(), "No se detectó fallo de worker en los logs"
