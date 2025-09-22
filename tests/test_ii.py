@@ -25,6 +25,7 @@ import os
 import glob
 from pathlib import Path
 from collections import defaultdict
+from time import sleep
 
 
 def get_all_reduces_ii():
@@ -52,7 +53,10 @@ def compare_ii(reduces_dict) -> bool:
     with open("filesystem/final_result/sequential-out.txt", "r") as f:
         for line in f:
             parts = line.split()
-            if reduces_dict[parts[0]] != parts[1]:
+            if (
+                parts[0] not in reduces_dict.keys()
+                or reduces_dict[parts[0]] != parts[1]
+            ):
                 print(f"{parts[1]} != {reduces_dict[parts[0]]}")
                 return False
         return True
@@ -76,15 +80,15 @@ def test_1_ii():
 
     # Correr secuencialmente
     subprocess.run(
-        [
-            "go run cmd/seq/mainseq.go plugins/ii.so filesystem/pg/pg-*.txt",
-        ],
+        "go run cmd/seq/mainseq.go plugins/ii.so filesystem/pg/pg-*.txt",
         shell=True,
         check=True,
     )
 
     # Correr concurrentemente
     subprocess.run(["./run_mr.sh 3 ii 0"], shell=True, check=True)
+
+    sleep(3)
 
     reduces = get_all_reduces_ii()
 
@@ -94,6 +98,12 @@ def test_1_ii():
 
     f1.close()
     f2.close()
+
+    subprocess.run(
+        "./empty_fs.sh",
+        shell=True,
+        check=True,
+    )
 
 
 if __name__ == "__main__":
