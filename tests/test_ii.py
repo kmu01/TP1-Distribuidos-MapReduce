@@ -26,6 +26,7 @@ import glob
 from pathlib import Path
 from collections import defaultdict
 
+
 def get_all_reduces_ii():
     result_dir = Path("filesystem/final_result")
     reduce_files = glob.glob(str(result_dir / "mr-out-*.txt"))
@@ -62,13 +63,13 @@ def test_1_ii():
     base_dir.mkdir(parents=True, exist_ok=True)
 
     f1 = tempfile.NamedTemporaryFile(
-        mode="w+b", dir=base_dir, delete=False, suffix=".txt"
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
     )
     f1.write(b"hola don pepito")
     f1.flush()
 
     f2 = tempfile.NamedTemporaryFile(
-        mode="w+b", dir=base_dir, delete=False, suffix=".txt"
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
     )
     f2.write(b"hola don jose")
     f2.flush()
@@ -86,13 +87,14 @@ def test_1_ii():
     subprocess.run(["./run_mr.sh 3 ii 0"], shell=True, check=True)
 
     reduces = get_all_reduces_ii()
-    
+
     assert compare_ii(reduces), "Results differ"
 
     print("[TEST ii 1] OK ☺️")
 
     f1.close()
     f2.close()
+
 
 if __name__ == "__main__":
     test_1_ii()
