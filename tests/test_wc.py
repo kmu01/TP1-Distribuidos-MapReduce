@@ -65,6 +65,13 @@ def compare(reduces_dict) -> bool:
                 return False
         return True
 
+def punctuation(reduces_dict) -> bool:
+    print(f"[DICCIONARIO]: {reduces_dict}")
+    for keys in reduces_dict.keys():
+        for character in k:  
+            if character in string.punctuation:
+                return False
+    return True
 
 def test_1():
     base_dir = Path("filesystem/pg")
@@ -162,13 +169,13 @@ def test_3():
     f1 = tempfile.NamedTemporaryFile(
         mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
     )
-    f1.write(b"hola, hola. chau!")
+    f1.write(b"hola hola chau")
     f1.flush()
 
     f2 = tempfile.NamedTemporaryFile(
         mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
     )
-    f2.write(b"hola, hola. chau!")
+    f2.write(b"hola??,, hola,. chau!.,")
     f2.flush()
 
     # Correr secuencialmente
@@ -186,6 +193,7 @@ def test_3():
     reduces = get_all_reduces()
 
     assert compare(reduces), "Results differ"
+    assert punctuation(reduces), "Result have punctuation"
 
     print("[TEST UNIT] OK ☺️")
 
@@ -200,7 +208,7 @@ def test_3():
 
 
 if __name__ == "__main__":
-    print("Starting Test 1:")
+    '''print("Starting Test 1:")
     test_1()
     print("Sleep 😴")
     sleep(4)
@@ -210,5 +218,5 @@ if __name__ == "__main__":
     print("Sleep 😴")
     sleep(4)
 
-    print("Starting Test 3:")
+    print("Starting Test 3:")'''
     test_3()
