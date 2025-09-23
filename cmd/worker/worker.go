@@ -270,14 +270,16 @@ func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_fu
 			return
 		}
 
-		if worker_failed(failure_prob) && result.TypeTask != int32(config.Wait) && result.TypeTask != int32(config.Finish) {
-			log.Fatal("Worker Failed. EXIT")
-		}
-
 		switch result.TypeTask {
 		case int32(config.Map):
+			if worker_failed(failure_prob) {
+				log.Fatal("Worker Failed. EXIT")
+			}
 			exec_map(ctx, connection, map_function, result)
 		case int32(config.Reduce):
+			if worker_failed(failure_prob) {
+				log.Fatal("Worker Failed. EXIT")
+			}
 			exec_reduce(ctx, connection, reduce_function, result)
 		case int32(config.Finish):
 			log.Print("All tasks completed. EXIT")
