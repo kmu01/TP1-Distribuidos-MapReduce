@@ -165,7 +165,7 @@ func exec_map(ctx context.Context, connection protos.CoordinatorClient, map_func
 	file_names := commit_map(map_result, config.Parcial_path, result.TaskId, result.Reducers)
 	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileNames: file_names})
 	if err != nil {
-		log.Fatalf("could not map, reduce_map might been finished:: %v", err)
+		log.Fatal("Could not return finished task, coordinator might have finished")
 	}
 }
 
@@ -184,14 +184,6 @@ func commit_reduce(contents []KeyValue, path string, task_id int32) {
 
 func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduce_function func(string, []string) string, result *protos.GiveTask) {
 	log.Print("REDUCE task assigned")
-	/*
-				Archivos parciales
-				mr-0-0.txt: hola 1, mundo 1, hola 1
-				mr-0-1.txt: mundo 1, hola 1
-
-				mr-0-0.txt: hola archivo1.txt, mundo archivo2.txt, hola archivo2.txt
-		        mr-0-1.txt: mundo archivo1.txt, hola archivo3.txt
-	*/
 
 	// Lee estos archivos parciales y junta los pares KeyValue
 	var allKVs []KeyValue
@@ -200,32 +192,11 @@ func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduc
 		allKVs = append(allKVs, kvs...)
 	}
 
-	/*
-				allKVs = [("hola", "1"),
-					("mundo", "1"),
-					("hola", "1"),
-					("mundo", "1"),
-					("hola", "1")]
-
-				allKVs = [("hola", "archivo1.txt"),
-		                  ("mundo", "archivo2.txt"),
-		                  ("hola", "archivo2.txt"),
-		                  ("mundo", "archivo1.txt"),
-		                  ("hola", "archivo3.txt")]
-	*/
-
 	// Se agrupa por palabra
 	groups := make(map[string][]string)
 	for _, kv := range allKVs {
 		groups[kv.Key] = append(groups[kv.Key], kv.Value)
 	}
-	/*
-				groups["hola"] = ["1", "1", "1"]
-				groups["mundo"] = ["1", "1"]
-
-				groups["hola"] = ["archivo1.txt", "archivo2.txt", "archivo3.txt"]
-		        groups["mundo"] = ["archivo2.txt", "archivo1.txt"]
-	*/
 
 	// Invocar el reduce del plugin
 	var finalResults []KeyValue
@@ -233,13 +204,6 @@ func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduc
 		output := reduce_function(k, v)
 		finalResults = append(finalResults, KeyValue{Key: k, Value: output})
 	}
-	/*
-				hola 3
-				mundo 2
-
-				hola archivo1.txt,archivo2.txt,archivo3.txt
-		        mundo archivo1.txt,archivo2.txt
-	*/
 
 	// Orden alfabetico
 	sort.Slice(finalResults, func(i, j int) bool {
@@ -261,9 +225,8 @@ func worker_failed(failure_prob int32) bool {
 
 func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string, failure_prob int32) {
 	var still_working bool = true
-	rand.Seed(1234)
 	for still_working {
-		log.Print("Asking for new task")
+		log.Print("[WORKER ]Asking for new task")
 		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
 		if err != nil {
 			log.Print("Connection with coordinator Finished: Tasks might be done.")

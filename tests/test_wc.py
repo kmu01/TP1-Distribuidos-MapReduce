@@ -1,71 +1,3 @@
-def check_worker_log():
-    for log_file in glob.glob("logs/worker_*.log"):
-        with open(log_file) as f:
-            if "Worker Failed. EXIT" in f.read():
-                return True
-    return False
-
-def test_wc_failure_reassign():
-    base_dir = Path("filesystem/pg")
-    base_dir.mkdir(parents=True, exist_ok=True)
-
-    f1 = tempfile.NamedTemporaryFile(
-        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
-    )
-    f1.write(b"hola don pepito")
-    f1.flush()
-
-    f2 = tempfile.NamedTemporaryFile(
-        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
-    )
-    f2.write(b"hola don jose")
-    f2.flush()
-
-    # Correr secuencialmente
-    subprocess.run(
-        "go run cmd/seq/mainseq.go plugins/wc.so filesystem/pg/pg-*.txt",
-        shell=True,
-        check=True,
-    )
-
-
-    # Lanzar workers con alta probabilidad de fallo
-    subprocess.run("./run_mr.sh 10 wc 40", shell=True, check=False)
-
-    # Chequear que al menos uno falló
-    assert check_worker_log(), "No se detectó fallo de worker en los logs"
-
-    reduces = get_all_reduces()
-    assert compare(reduces), "Results differ: el trabajo no se terminó correctamente"
-
-    print("[TEST WC FAILURE REASSIGN] OK ☺️")
-
-    f1.close()
-    f2.close()
-
-    subprocess.run(
-        "./empty_fs.sh",
-        shell=True,
-        check=True,
-    )
-# Caso simple
-# Entrada: "hola hola chau"
-# Esperado: {"hola": 2, "chau": 1}
-
-# Case-insensitive / normalización (según tu implementación)
-# Entrada: "Hola hOlA CHAU"
-# Esperado: {"hola": 2, "chau": 1}
-
-# Signos de puntuación
-# Entrada: "hola, hola. chau!"
-# Esperado: {"hola": 2, "chau": 1}
-
-# Texto vacío
-# Entrada: ""
-# Esperado: {}
-
-# Archivo grande (stress test)
-# Generar texto repetitivo y chequear que el conteo sea correcto.
 import tempfile
 import subprocess
 from pathlib import Path
@@ -74,21 +6,32 @@ import shutil
 from collections import defaultdict
 import os
 from time import sleep
+import time
 
 
 def clean_filesystem():
-    result_dir = Path("filesystem/final_result")
-    if result_dir.exists():
-        shutil.rmtree(result_dir)
-    result_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        "./empty_fs.sh",
+        shell=True,
+        check=True,
+    )
+
+
+# Esperando a que el coordinador se ponga a escuchar sobre gRPC
+def wait_for_coordinator_log(logfile, timeout=10):
+    start = time.time()
+    while time.time() - start < timeout:
+        if os.path.exists(logfile):
+            with open(logfile) as f:
+                text = f.read()
+                if "listening" in text:
+                    return True
+        time.sleep(0.2)
+    raise TimeoutError("Coordinator no levantó en el tiempo esperado")
 
 
 def get_all_reduces():
-    print("cwd:", os.getcwd())
     reduce_files = glob.glob("filesystem/final_result/mr-out-*")
-
-    print(f"reduce files: {reduce_files}")
-    print("Archivos en final_result:", list(Path("filesystem/final_result").glob("*")))
 
     final_result = defaultdict(int)
 
@@ -111,12 +54,13 @@ def compare(reduces_dict) -> bool:
             if parts[0] not in reduces_dict.keys() or int(
                 reduces_dict[parts[0]]
             ) != int(parts[1]):
-                print(f"[Differ] {parts} != {reduces_dict}")
+                print(f"[ERROR] {parts} != {reduces_dict}")
                 return False
         return True
 
 
 def test_1():
+    print("[UNIT TEST] Starting")
     base_dir = Path("filesystem/pg")
     base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -144,21 +88,20 @@ def test_1():
 
     reduces = get_all_reduces()
 
-    assert compare(reduces), "Results differ"
+    try:
+        assert compare(reduces), "Results differ"
+        print("[UNIT TEST] OK ☺️")
 
-    print("[TEST UNIT] OK ☺️")
+    finally:
+        f1.close()
+        f2.close()
 
-    f1.close()
-    f2.close()
-
-    subprocess.run(
-        "./empty_fs.sh",
-        shell=True,
-        check=True,
-    )
+        clean_filesystem()
 
 
 def test_2():
+    print("[UPPER/LOWER TEST] Starting")
+
     base_dir = Path("filesystem/pg")
     base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -186,34 +129,33 @@ def test_2():
 
     reduces = get_all_reduces()
 
-    assert compare(reduces), "Results differ"
+    try:
+        assert compare(reduces), "Results differ"
+        print("[UPPER/LOWER TEST] OK ☺️")
 
-    print("[TEST UNIT] OK ☺️")
+    finally:
+        f1.close()
+        f2.close()
 
-    f1.close()
-    f2.close()
-
-    subprocess.run(
-        "./empty_fs.sh",
-        shell=True,
-        check=True,
-    )
+        clean_filesystem()
 
 
 def test_3():
+    print("[PUNCTUATION TEST] Starting")
+
     base_dir = Path("filesystem/pg")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     f1 = tempfile.NamedTemporaryFile(
         mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
     )
-    f1.write(b"hola, hola. chau!")
+    f1.write(b"hola hola chau")
     f1.flush()
 
     f2 = tempfile.NamedTemporaryFile(
         mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
     )
-    f2.write(b"hola, hola. chau!")
+    f2.write(b"hola,,, hola!!. chau!$$")
     f2.flush()
 
     # Correr secuencialmente
@@ -228,29 +170,171 @@ def test_3():
 
     reduces = get_all_reduces()
 
-    assert compare(reduces), "Results differ"
+    try:
+        assert compare(reduces), "Results differ"
 
-    print("[TEST UNIT] OK ☺️")
+        print("[PUNCTUATION TEST] OK ☺️")
 
-    f1.close()
-    f2.close()
+    finally:
+        f1.close()
+        f2.close()
 
+        clean_filesystem()
+
+
+def check_worker_log():
+    for log_file in glob.glob("logs/worker_*.log"):
+        with open(log_file) as f:
+            if "Worker Failed. EXIT" in f.read():
+                return True
+    return False
+
+
+def test_wc_failure_reassign():
+    print("[FAILURE TEST] Starting")
+
+    subprocess.run("mkdir -p logs", shell=True, check=False)
+
+    base_dir = Path("filesystem/pg")
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    f1 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
+    )
+    f1.write(b"hola don pepito")
+    f1.flush()
+
+    f2 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
+    )
+    f2.write(b"hola don jose")
+    f2.flush()
+
+    f3 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
+    )
+    f3.write(b"hola don josefina")
+    f3.flush()
+
+    f4 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
+    )
+    f4.write(b"hola don martin")
+    f4.flush()
+
+    # Correr secuencialmente
     subprocess.run(
-        "./empty_fs.sh",
+        "go run cmd/seq/mainseq.go plugins/wc.so filesystem/pg/pg-*.txt",
         shell=True,
         check=True,
     )
 
+    # Coordinador
+    coordinator = subprocess.Popen(
+        "go run cmd/coordinator/coordinator.go filesystem/pg/pg-*.txt > logs/coordinator.log 2>&1",
+        shell=True,
+    )
+
+    wait_for_coordinator_log("logs/coordinator.log")
+
+    # Worker que va a caer 100% de las veces
+    worker1 = subprocess.Popen(
+        "go run ./cmd/worker/worker.go ./plugins/wc.so 100 > logs/worker_1.log 2>&1",
+        shell=True,
+    )
+
+    # Worker que va a caer 100% de las veces
+    worker2 = subprocess.Popen(
+        "go run ./cmd/worker/worker.go ./plugins/wc.so 100 > logs/worker_2.log 2>&1",
+        shell=True,
+    )
+
+    # Worker que no va a fallar
+    worker3 = subprocess.Popen(
+        "go run ./cmd/worker/worker.go ./plugins/wc.so 0 > logs/worker_3.log 2>&1",
+        shell=True,
+    )
+
+    coordinator.wait()
+    worker1.wait()
+    worker2.wait()
+    worker3.wait()
+
+    # Chequear que al menos uno falló
+    try:
+        assert check_worker_log(), "No se detectó fallo de worker en los logs"
+
+        reduces = get_all_reduces()
+        assert compare(reduces), (
+            "Results differ: el trabajo no se terminó correctamente"
+        )
+
+        print("[FAILURE TEST] OK ☺️")
+    finally:
+        f1.close()
+        f2.close()
+        f3.close()
+        f4.close()
+
+        clean_filesystem()
+
+
+def test_stress():
+    print("[STRESS TEST] Starting")
+
+    base_dir = Path("filesystem/pg")
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    f1 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
+    )
+    f1.write(b"hola " * 10000)
+    f1.write(b"don " * 2000)
+    f1.write(b"pepito " * 5000)
+    f1.flush()
+
+    f2 = tempfile.NamedTemporaryFile(
+        mode="w+b", dir=base_dir, delete=False, suffix=".txt", prefix="pg-"
+    )
+    f2.write(b"hola " * 10000)
+    f2.write(b"don " * 2000)
+    f2.write(b"jose " * 5000)
+    f2.flush()
+
+    expected_output = {"hola": 20000, "don": 4000, "pepito": 5000, "jose": 5000}
+
+    # Correr secuencialmente
+    subprocess.run(
+        "go run cmd/seq/mainseq.go plugins/wc.so filesystem/pg/pg-*.txt",
+        shell=True,
+        check=True,
+    )
+
+    # Correr concurrentemente
+    subprocess.run(["./run_mr.sh"], shell=True, check=True)
+
+    reduces = get_all_reduces()
+
+    try:
+        assert compare(reduces), "Results differ"
+        assert reduces == expected_output, "Results differ"
+
+        print("[STRESS TEST] OK ☺️")
+
+    finally:
+        f1.close()
+        f2.close()
+
+        clean_filesystem()
+
 
 if __name__ == "__main__":
-    print("Starting Test 1:")
     test_1()
 
-    print("Starting Test 2:")
     test_2()
 
-    print("Starting Test 3:")
     test_3()
 
-    print("Starting Test WC Failure Reassign:")
     test_wc_failure_reassign()
+
+    test_stress()

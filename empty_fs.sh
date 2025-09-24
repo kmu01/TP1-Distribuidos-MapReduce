@@ -1,4 +1,5 @@
-rm filesystem/parcial_result/*.txt
-rm filesystem/final_result/*.txt
-rm filesystem/pg/*
-rm logs/*
+#!/bin/bash
+rm -f filesystem/parcial_result/*.txt
+rm -f filesystem/final_result/*.txt
+rm -f filesystem/pg/*
+rm -f logs/*
