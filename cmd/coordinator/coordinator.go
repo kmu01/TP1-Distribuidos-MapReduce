@@ -177,14 +177,14 @@ func fetch_map_task() *Task {
 }
 
 func fetch_reduce_task() *Task {
-	// Obtener keys ordenadas para determinismo
+	// ordenamos las tasks del coordinator por clave
 	keys := make([]int, 0, len(coordinator.reduce_tasks))
 	for k := range coordinator.reduce_tasks {
 		keys = append(keys, int(k))
 	}
 	sort.Ints(keys)
 
-	// Si REDUCE task disponible
+	// ver si hay una task disponible
 	for _, k := range keys {
 		task := coordinator.reduce_tasks[int32(k)]
 		if task.status == config.Available {
@@ -195,7 +195,7 @@ func fetch_reduce_task() *Task {
 		}
 	}
 
-	// Si REDUCE task no disponible, ver si alguna se tomo demasiado tiempo (timeout) -> reasignar
+	// ver si hay alguna task que tardo mas de 10 segundos
 	for _, k := range keys {
 		task := coordinator.reduce_tasks[int32(k)]
 		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
@@ -244,7 +244,7 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
 
-	// Buscar al worker que terminó
+	// buscamos al worker que termino
 	for i := int32(0); i < int32(len(coordinator.workers)); i++ {
 		if coordinator.workers[i].id == result.WorkerId {
 			worker_position = i
