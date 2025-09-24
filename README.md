@@ -1,3 +1,10 @@
+## Map Reduce - Sistemas Distribuidos
+
+- Alejandro Schamun - 108545
+- Dolores Levi - 105993
+- Federico Camurri - 106359
+- Patricio Silva - 106422
+
 ## Commands to run
 
 ### How to build the service
@@ -41,7 +48,7 @@ go run cmd/coordinator/coordinator.go filesystem/pg/pg-*.txt
 A single worker with the `plugin.so` plugin and a `n`% probability of failure
 
 ```bash
-go run ./cmd/worker/worker.go ./plugins/<p.so> <n>
+go run ./cmd/worker/worker.go ./plugins/<plugin.so> <n>
 ```
 
 To run sequentially
