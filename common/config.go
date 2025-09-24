@@ -1,8 +1,8 @@
 package config
 
-const socketPath = "/tmp/mapreduce.sock"
+const SocketPath = "/tmp/mapreduce.sock"
 
-const MaxTimeSeconds = 10
+const MaxTimeSeconds = 3
 
 const Reducers = 2
 
@@ -12,6 +12,7 @@ const (
 	Map    TaskType = 0
 	Reduce TaskType = 1
 	Finish TaskType = 2
+	Wait   TaskType = 3
 )
 
 type TaskStatus int32
@@ -27,4 +28,9 @@ type TypeCommit int32
 const (
 	Accept TypeCommit = 1
 	Deny   TypeCommit = 2
+)
+
+const (
+	Parcial_path = "filesystem/parcial_result/"
+	Result_path  = "filesystem/final_result/"
 )

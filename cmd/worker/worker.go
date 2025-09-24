@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,11 +27,8 @@ type KeyValue struct {
 	Value string
 }
 
-const parcial_path = "filesystem/parcial_result/"
-const result_path = "filesystem/final_result/"
-
 func connect() (context.Context, protos.CoordinatorClient) {
-	socketPath := "/tmp/mapreduce.sock"
+	socketPath := config.SocketPath
 	conn, err := grpc.Dial("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("failed to connect: %v", err)
@@ -121,7 +119,6 @@ func get_hash_lines(map_result []mapreduceseq.KeyValue, reducers int32) map[int]
 }
 
 func get_reduce_contents(contents []KeyValue) string {
-	// Ordenar resultados alfabéticamente por clave (Para comparar con la version secuencial)
 	sort.Slice(contents, func(i, j int) bool {
 		return contents[i].Key < contents[j].Key
 	})
@@ -143,7 +140,7 @@ func commit_map(map_result []mapreduceseq.KeyValue, path string, task_id int32, 
 }
 
 func run_reduce(file string) []KeyValue {
-	file_path := parcial_path + file
+	file_path := config.Parcial_path + file
 	content, err := os.ReadFile(file_path)
 	if err != nil {
 		log.Fatalf("cannot read %v: %v", file, err)
@@ -164,10 +161,10 @@ func run_reduce(file string) []KeyValue {
 func exec_map(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, result *protos.GiveTask) {
 	log.Print("MAP task assigned")
 	map_result := run_map(result.Files[0], map_function)
-	file_names := commit_map(map_result, parcial_path, result.TaskId, result.Reducers)
+	file_names := commit_map(map_result, config.Parcial_path, result.TaskId, result.Reducers)
 	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId, FileNames: file_names})
 	if err != nil {
-		log.Fatalf("could not map, reduce_map might been finished:: %v", err)
+		log.Fatal("Could not return finished task, coordinator might have finished")
 	}
 }
 
@@ -186,14 +183,6 @@ func commit_reduce(contents []KeyValue, path string, task_id int32) {
 
 func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduce_function func(string, []string) string, result *protos.GiveTask) {
 	log.Print("REDUCE task assigned")
-	/*
-				Archivos parciales
-				mr-0-0.txt: hola 1, mundo 1, hola 1
-				mr-0-1.txt: mundo 1, hola 1
-
-				mr-0-0.txt: hola archivo1.txt, mundo archivo2.txt, hola archivo2.txt
-		        mr-0-1.txt: mundo archivo1.txt, hola archivo3.txt
-	*/
 
 	// Lee estos archivos parciales y junta los pares KeyValue
 	var allKVs []KeyValue
@@ -202,32 +191,11 @@ func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduc
 		allKVs = append(allKVs, kvs...)
 	}
 
-	/*
-				allKVs = [("hola", "1"),
-					("mundo", "1"),
-					("hola", "1"),
-					("mundo", "1"),
-					("hola", "1")]
-
-				allKVs = [("hola", "archivo1.txt"),
-		                  ("mundo", "archivo2.txt"),
-		                  ("hola", "archivo2.txt"),
-		                  ("mundo", "archivo1.txt"),
-		                  ("hola", "archivo3.txt")]
-	*/
-
 	// Se agrupa por palabra
 	groups := make(map[string][]string)
 	for _, kv := range allKVs {
 		groups[kv.Key] = append(groups[kv.Key], kv.Value)
 	}
-	/*
-				groups["hola"] = ["1", "1", "1"]
-				groups["mundo"] = ["1", "1"]
-
-				groups["hola"] = ["archivo1.txt", "archivo2.txt", "archivo3.txt"]
-		        groups["mundo"] = ["archivo2.txt", "archivo1.txt"]
-	*/
 
 	// Invocar el reduce del plugin
 	var finalResults []KeyValue
@@ -235,13 +203,6 @@ func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduc
 		output := reduce_function(k, v)
 		finalResults = append(finalResults, KeyValue{Key: k, Value: output})
 	}
-	/*
-				hola 3
-				mundo 2
-
-				hola archivo1.txt,archivo2.txt,archivo3.txt
-		        mundo archivo1.txt,archivo2.txt
-	*/
 
 	// Orden alfabetico
 	sort.Slice(finalResults, func(i, j int) bool {
@@ -249,10 +210,10 @@ func exec_reduce(ctx context.Context, connection protos.CoordinatorClient, reduc
 	})
 
 	// Commiteo
-	commit_reduce(finalResults, result_path, result.TaskId)
+	commit_reduce(finalResults, config.Result_path, result.TaskId)
 	_, err := connection.FinishedTask(ctx, &protos.TaskResult{WorkerId: result.WorkerId})
 	if err != nil {
-		log.Fatal("Connection with coordinator Failed: Tasks might be done.")
+		log.Fatal("Connection with coordinator Failed: reduce")
 	}
 }
 
@@ -264,24 +225,30 @@ func worker_failed(failure_prob int32) bool {
 func run_worker(ctx context.Context, connection protos.CoordinatorClient, map_function func(string, string) []mapreduceseq.KeyValue, reduce_function func(string, []string) string, failure_prob int32) {
 	var still_working bool = true
 	for still_working {
-		log.Print("Asking for new task")
+		log.Print("[WORKER ]Asking for new task")
 		result, err := connection.AssignTask(ctx, &protos.RequestTask{})
 		if err != nil {
-			log.Fatal("Connection with coordinator Failed: Tasks might be done.")
-		}
-
-		if worker_failed(failure_prob) {
-			log.Print("Worker Failed. EXIT")
-			break
+			log.Print("Connection with coordinator Finished: Tasks might be done.")
+			return
 		}
 
 		switch result.TypeTask {
 		case int32(config.Map):
+			if worker_failed(failure_prob) {
+				log.Fatal("Worker Failed. EXIT")
+			}
 			exec_map(ctx, connection, map_function, result)
 		case int32(config.Reduce):
+			if worker_failed(failure_prob) {
+				log.Fatal("Worker Failed. EXIT")
+			}
 			exec_reduce(ctx, connection, reduce_function, result)
-		default:
+		case int32(config.Finish):
+			log.Print("All tasks completed. EXIT")
 			still_working = false
+		default:
+			log.Print("No task assigned. Waiting...")
+			time.Sleep(time.Second * 2)
 		}
 	}
 }
@@ -335,4 +302,3 @@ func main() {
 	ctx, connection := connect()
 	run_worker(ctx, connection, map_function, reduce_function, failure_prob)
 }
-	

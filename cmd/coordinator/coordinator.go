@@ -8,6 +8,7 @@ import (
 	"mapreduce-tp/common/protos"
 	"net"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,7 +20,7 @@ import (
 type Coordinator struct {
 	workers           []Worker ///workers que estan activos
 	map_tasks         []Task   ///completed and not completed
-	reduce_tasks      map[int32]Task
+	reduce_tasks      map[int32]*Task
 	finish_map_reduce bool
 	server            *grpc.Server
 	next_worker_id    int32
@@ -47,7 +48,6 @@ type myCoordinatorServer struct {
 }
 
 func init_coordinator(files []string) {
-	coordinator.server = grpc.NewServer()
 	coordinator.next_worker_id = 0
 	coordinator.reducers = config.Reducers
 
@@ -60,10 +60,11 @@ func init_coordinator(files []string) {
 		id += 1
 	}
 	coordinator.finish_map_reduce = false
-	coordinator.reduce_tasks = make(map[int32]Task)
+
+	coordinator.reduce_tasks = make(map[int32]*Task)
 
 	for i := int32(0); i < coordinator.reducers; i++ {
-		task := Task{
+		task := &Task{
 			task_id:   i,
 			task_type: config.Reduce,
 			status:    config.Available,
@@ -71,6 +72,8 @@ func init_coordinator(files []string) {
 		}
 		coordinator.reduce_tasks[i] = task
 	}
+
+	coordinator.server = grpc.NewServer()
 }
 
 // respondemos al RequestTask del worker
@@ -85,15 +88,18 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 		id:   coordinator.next_worker_id,
 		task: task,
 	}
-	// if !coordinator.finish_map_reduce {
-	//log.Print("Assigned task ", task.task_id, " - type task: ", task.task_type)
-	// }
 
 	coordinator.workers = append(coordinator.workers, worker)
 	if coordinator.finish_map_reduce {
 		log.Print("No more tasks")
 		defer coordinator.server.Stop()
 	}
+
+	if task == nil {
+		log.Print("No task assigned")
+	}
+
+	log.Print("Task type: ", task.task_type)
 	return &protos.GiveTask{
 		TypeTask: int32(task.task_type),
 		Files:    task.files,
@@ -103,22 +109,50 @@ func (s *myCoordinatorServer) AssignTask(ctx context.Context, in *protos.Request
 	}, nil
 }
 
+func allMapCompleted() bool {
+	for _, task := range coordinator.map_tasks {
+		log.Print("Map task ", task.task_id, " status: ", task.status)
+		if task.status != config.Completed {
+			return false
+		}
+	}
+	return true
+}
+
+func allReduceCompleted() bool {
+	for _, task := range coordinator.reduce_tasks {
+		log.Print("Reduce task ", task.task_id, " status: ", task.status)
+		if task.status != config.Completed {
+			return false
+		}
+	}
+	return true
+}
+
 func fetch_task() *Task {
 	var task *Task
 	task = fetch_map_task()
 	if task == nil {
-		task = fetch_reduce_task()
+		if allMapCompleted() {
+			task = fetch_reduce_task()
+		} else {
+			return &Task{task_type: config.Wait, status: config.Available}
+		}
 	}
 	if task == nil {
-		task = &Task{task_type: config.Finish, status: config.Available}
-		coordinator.finish_map_reduce = true
+		if allReduceCompleted() {
+			coordinator.finish_map_reduce = true
+			return &Task{task_type: config.Finish, status: config.Available}
+		} else {
+			return &Task{task_type: config.Wait, status: config.Available}
+		}
 	}
+
 	return task
 }
 
 func fetch_map_task() *Task {
-
-	// If MAP task available
+	// Si hay MAP task disponible
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
 		if task.status == config.Available {
@@ -128,48 +162,46 @@ func fetch_map_task() *Task {
 		}
 	}
 
-	//If MAP task not available, see if one is taking too long
+	// Si alguna MAP task está tomada demasiado tiempo -> reasignar (timeout)
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
 		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
-			task.time = time.Now()
-			return task
+			// double check (por si acaso)
+			if task.status != config.Completed {
+				task.time = time.Now()
+				return task
+			}
 		}
 	}
-
-	//If all MAP tasks are taken and on time, assign the first one unavailable
-	for i := 0; i < len(coordinator.map_tasks); i++ {
-		task := &coordinator.map_tasks[i]
-		if task.status != config.Completed {
-			task.time = time.Now()
-			return task
-		}
-	}
-
 	return nil
 }
 
 func fetch_reduce_task() *Task {
+	// Obtener keys ordenadas para determinismo
+	keys := make([]int, 0, len(coordinator.reduce_tasks))
+	for k := range coordinator.reduce_tasks {
+		keys = append(keys, int(k))
+	}
+	sort.Ints(keys)
 
-	// If REDUCE task available
-	for id, task := range coordinator.reduce_tasks {
-		if task.status == 0 {
-			task.status = 1
+	// Si REDUCE task disponible
+	for _, k := range keys {
+		task := coordinator.reduce_tasks[int32(k)]
+		if task.status == config.Available {
+			task.status = config.Unavailable
 			task.time = time.Now()
-			coordinator.reduce_tasks[id] = task
 			log.Print("Assigned REDUCE task ", task.task_id, " - file: ", task.files)
-			return &task
+			return task
 		}
 	}
 
-	//If REDUCE task not available, see if one is taking too long
-	for id, task := range coordinator.reduce_tasks {
-		if task.status == 1 && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
-			log.Print("Reduced task has reached time limit")
-			log.Print("tomada Task demorada")
+	// Si REDUCE task no disponible, ver si alguna se tomo demasiado tiempo (timeout) -> reasignar
+	for _, k := range keys {
+		task := coordinator.reduce_tasks[int32(k)]
+		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
+			log.Print("Reduce task has reached time limit")
 			task.time = time.Now()
-			coordinator.reduce_tasks[id] = task
-			return &task
+			return task
 		}
 	}
 
@@ -191,8 +223,18 @@ func assign_partial_results(file_names []string) {
 	for _, file := range file_names {
 		reducer_id := get_reducer_ID(file)
 		task := coordinator.reduce_tasks[int32(reducer_id)]
+		found := false
+		for _, f := range task.files {
+			if f == file {
+				found = true
+				break
+			}
+		}
+		if found {
+			log.Printf("Partial %s already present for reduce %d — skipping duplicate", file, reducer_id)
+			continue
+		}
 		task.files = append(task.files, file)
-		coordinator.reduce_tasks[int32(reducer_id)] = task
 	}
 }
 
@@ -202,39 +244,40 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
 
-	// CUIDADO CON USAR WORKER ID COMO TASK IDS
-	var task_id int32
+	// Buscar al worker que terminó
 	for i := int32(0); i < int32(len(coordinator.workers)); i++ {
-		task_id = coordinator.workers[i].id
-		if task_id == result.WorkerId {
+		if coordinator.workers[i].id == result.WorkerId {
 			worker_position = i
 			worker_task = coordinator.workers[i].task
 			break
 		}
 	}
+
 	coordinator.workers = append(coordinator.workers[:worker_position], coordinator.workers[worker_position+1:]...)
 
+	// Si la tarea ya estaba marcada como completada, no committear
 	if worker_task.status == config.Completed {
 		return &protos.Ack{CommitState: int32(config.Deny)}, nil
 	}
+
 	worker_task.status = config.Completed
 
 	if worker_task.task_type == config.Map {
 		assign_partial_results(result.FileNames)
 	} else if worker_task.task_type == config.Reduce {
-		task := coordinator.reduce_tasks[task_id]
+		task := coordinator.reduce_tasks[worker_task.task_id]
 		task.status = config.Completed
-		coordinator.reduce_tasks[task_id] = task
 	}
+
 	return &protos.Ack{CommitState: int32(config.Accept)}, nil
 }
 
 func start_server() {
-	if _, err := os.Stat(socketPath); err == nil {
-		os.Remove(socketPath)
+	if _, err := os.Stat(config.SocketPath); err == nil {
+		os.Remove(config.SocketPath)
 	}
 
-	lis, err := net.Listen("unix", socketPath)
+	lis, err := net.Listen("unix", config.SocketPath)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -242,20 +285,28 @@ func start_server() {
 	server := coordinator.server
 	service := &myCoordinatorServer{}
 	protos.RegisterCoordinatorServer(server, service)
-	log.Printf("Coordinator listening on unix socket %s", socketPath)
+	log.Printf("Coordinator listening on unix socket %s", config.SocketPath)
 	err = server.Serve(lis)
 	if err != nil {
 		log.Fatalf("cant serve: %s", err)
 	}
-	os.Remove(socketPath)
+	os.Remove(config.SocketPath)
 }
-
-const socketPath = "/tmp/mapreduce.sock"
 
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: go run coordinator.go file1.txt file2.txt ...\n")
 		os.Exit(1)
+	}
+
+	err := os.MkdirAll(config.Result_path, 0755)
+	if err != nil {
+		log.Fatalf("Error creating result directory: %v", err)
+	}
+
+	err = os.MkdirAll(config.Parcial_path, 0755)
+	if err != nil {
+		log.Fatalf("Error creating parcial directory: %v", err)
 	}
 
 	files := os.Args[1:]

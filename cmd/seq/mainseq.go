@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	config "mapreduce-tp/common"
 	mapreduceseq "mapreduce-tp/seq"
 	"os"
 	"plugin"
@@ -46,7 +47,12 @@ func main() {
 	// Ejecutar secuencial
 	result := mapreduceseq.Sequential(files, mapf, reducef)
 
-	outFile, err := os.Create("filesystem/final_result/sequential-out.txt")
+	err = os.MkdirAll(config.Result_path, 0755)
+	if err != nil {
+		log.Fatalf("Error creating result directory: %v", err)
+	}
+
+	outFile, err := os.Create(config.Result_path + "sequential-out.txt")
 	if err != nil {
 		log.Fatalf("cannot create output file: %v", err)
 	}

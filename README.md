@@ -40,3 +40,12 @@ To run sequentially
 ```bash
 go run cmd/seq/mainseq.go plugins/wc.so filesystem/pg/pg-*.txt
 ```
+
+### How to test
+
+Either word count or inverted index
+
+```bash
+python3 ./tests/test_wc.py
+python3 ./tests/test_ii.py
+```
