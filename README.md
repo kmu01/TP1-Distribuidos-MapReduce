@@ -15,12 +15,21 @@ Build the protos
 protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative  common/protos/communication.protos
 ```
 
+Folder needed to run manually:
+
+```
+|_ filesystem
+    |_ pg
+    |_ parcial_result
+    |_ final_result
+```
+
 ### How to run the service
 
-Run everything together with `N` workers, plugin `plugin` and `P` probability of failure
+Run everything together with `N` workers, plugin `plugin.so` and `P` probability of failure
 
 ```bash
-./run_mr.sh <N> <plugin> <P>
+./run_mr.sh <N> <plugin.so> <P>
 ```
 
 Run the coordinator
@@ -29,10 +38,10 @@ Run the coordinator
 go run cmd/coordinator/coordinator.go filesystem/pg/pg-*.txt
 ```
 
-A single worker with the `p` plugin and a `n`% probability of failure
+A single worker with the `plugin.so` plugin and a `n`% probability of failure
 
 ```bash
-go run ./cmd/worker/worker.go ./plugins/p.so <n>
+go run ./cmd/worker/worker.go ./plugins/<p.so> <n>
 ```
 
 To run sequentially
