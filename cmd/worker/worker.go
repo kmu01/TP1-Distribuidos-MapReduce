@@ -119,7 +119,6 @@ func get_hash_lines(map_result []mapreduceseq.KeyValue, reducers int32) map[int]
 }
 
 func get_reduce_contents(contents []KeyValue) string {
-	// Ordenar resultados alfabéticamente por clave (Para comparar con la version secuencial)
 	sort.Slice(contents, func(i, j int) bool {
 		return contents[i].Key < contents[j].Key
 	})

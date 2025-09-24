@@ -133,7 +133,6 @@ func fetch_task() *Task {
 	var task *Task
 	task = fetch_map_task()
 	if task == nil {
-		//task = fetch_reduce_task()
 		if allMapCompleted() {
 			task = fetch_reduce_task()
 		} else {
@@ -163,7 +162,7 @@ func fetch_map_task() *Task {
 		}
 	}
 
-	// Si alguna MAP task está tomada demasiado tiempo → reasignar (timeout)
+	// Si alguna MAP task está tomada demasiado tiempo -> reasignar (timeout)
 	for i := 0; i < len(coordinator.map_tasks); i++ {
 		task := &coordinator.map_tasks[i]
 		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
@@ -174,8 +173,6 @@ func fetch_map_task() *Task {
 			}
 		}
 	}
-
-	// Si no hay nada que asignar (todas tomadas y no timed-out) -> nil para que caller retorne WAIT
 	return nil
 }
 
@@ -198,7 +195,7 @@ func fetch_reduce_task() *Task {
 		}
 	}
 
-	// Si REDUCE task no disponible, ver si alguna se tomó demasiado tiempo (timeout) -> reasignar
+	// Si REDUCE task no disponible, ver si alguna se tomo demasiado tiempo (timeout) -> reasignar
 	for _, k := range keys {
 		task := coordinator.reduce_tasks[int32(k)]
 		if task.status == config.Unavailable && (time.Since(task.time)).Seconds() >= config.MaxTimeSeconds {
@@ -226,7 +223,6 @@ func assign_partial_results(file_names []string) {
 	for _, file := range file_names {
 		reducer_id := get_reducer_ID(file)
 		task := coordinator.reduce_tasks[int32(reducer_id)]
-		// dedupe: no agregar si ya existe
 		found := false
 		for _, f := range task.files {
 			if f == file {
@@ -257,22 +253,18 @@ func (s *myCoordinatorServer) FinishedTask(_ context.Context, result *protos.Tas
 		}
 	}
 
-	// Eliminar al worker de la lista
 	coordinator.workers = append(coordinator.workers[:worker_position], coordinator.workers[worker_position+1:]...)
 
-	// Si la tarea ya estaba marcada como completada, negar commit
+	// Si la tarea ya estaba marcada como completada, no committear
 	if worker_task.status == config.Completed {
 		return &protos.Ack{CommitState: int32(config.Deny)}, nil
 	}
 
-	// Marcar como completada
 	worker_task.status = config.Completed
 
 	if worker_task.task_type == config.Map {
-		// Guardar parciales para los reducers
 		assign_partial_results(result.FileNames)
 	} else if worker_task.task_type == config.Reduce {
-		// Como reduce_tasks guarda punteros, basta con marcar status
 		task := coordinator.reduce_tasks[worker_task.task_id]
 		task.status = config.Completed
 	}
